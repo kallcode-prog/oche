@@ -113,6 +113,9 @@
   .celebrate.c140{color:var(--sec);font-size:84px}
   .celebrate.c100{color:var(--warn);font-size:72px}
   .celebrate.word{font-size:44px;font-weight:700;color:var(--accent)}
+  .confetti{position:fixed;inset:0;pointer-events:none;z-index:90;overflow:hidden}
+  .confetti i{position:absolute;top:-14px;width:9px;height:14px;border-radius:2px;animation:fall linear forwards}
+  @keyframes fall{to{transform:translateY(105vh) rotate(540deg);opacity:.85}}
   /* stats */
   .statgrid{display:grid;grid-template-columns:1fr 1fr;gap:10px}
   .stat{background:var(--surface2);border-radius:12px;padding:12px}
@@ -474,7 +477,7 @@ function viewTraining(){
     ['doubles','&#9211;','Doubles Practice','Tr&auml;na p&aring; dubblar','%'],
     ['trebles','&#9650;','Trebles Practice','Tr&auml;na p&aring; treble-f&auml;lten','%'],
     ['bulls','&#9678;','Bulls Practice','Tr&auml;na p&aring; bullseye','%'],
-    ['shanghai','&#11088;','Shanghai','Single + dubbel + trippel = vinst!','p'],
+    ['bob27','&#127919;',"Bob's 27",'Dubbel-utmaning D1 till Bull','p'],
     ['halveit','&#9889;','Halve-it','Missar du halveras po&auml;ngen','p'],
   ];
   return topbar('Tr&auml;ning')+`<div class="view">
@@ -490,6 +493,14 @@ function viewTraining(){
         <div class="chip" onclick="startCheckout('latt')">L&auml;tt</div>
         <div class="chip" onclick="startCheckout('medel')">Medel</div>
         <div class="chip" onclick="startCheckout('svar')">Sv&aring;r</div>
+      </div>
+    </div>
+    <div class="card">
+      <div class="label">Shanghai</div>
+      <div class="muted" style="margin-bottom:10px;text-transform:none;letter-spacing:0">Single + dubbel + trippel p&aring; samma nummer = vinst!${pbs.shanghai!=null?' &middot; PB '+pbs.shanghai+'p':''}</div>
+      <div class="chips">
+        <div class="chip" onclick="startShanghai(7)">1&ndash;7</div>
+        <div class="chip" onclick="startShanghai(20)">1&ndash;20</div>
       </div>
     </div>
     ${recordsCard(pbs)}
@@ -539,6 +550,7 @@ function viewTrainingActive(){
     case 'checkout': return ttCheckout(tr);
     case 'halveit': return ttHalveit(tr);
     case 'shanghai': return ttShanghai(tr);
+    case 'bob27': return ttBob27(tr);
     default: return ttSeq(tr);
   }
 }
@@ -607,6 +619,16 @@ function ttShanghai(tr){
        <button onclick="shanghaiHit('M')">Miss</button>
        <button class="back" onclick="shanghaiBack()">&#9003; Tillbaka</button>
      </div>`;
+}
+function ttBob27(tr){
+  if(tr.out){ saveTrainingResult('bob27',tr.title,0); return ttResult(tr,'Utslagen p&aring; '+tr.label,'0 p'); }
+  if(tr.index>=tr.targets.length){ saveTrainingResult('bob27',tr.title,tr.score); return ttResult(tr,tr.targets.length+' m&aring;l klara',tr.score+' p'); }
+  const t=tr.targets[tr.index];
+  return thead(tr,(tr.index+1)+'/'+tr.targets.length+' &middot; '+tr.score+' p') + ttHero('Tr&auml;ffa', t, '3 pilar &middot; po&auml;ng '+tr.score) +
+    `<div style="padding:8px 16px 24px">
+      <div class="muted" style="text-align:center;margin-bottom:12px">Hur m&aring;nga av 3 tr&auml;ffade? (0 = po&auml;ng dras av)</div>
+      <div class="chips">${[0,1,2,3].map(k=>`<div class="chip" onclick="bob27Mark(${k})">${k}</div>`).join('')}</div>
+    </div>`;
 }
 
 /* ============================== nav ============================== */
@@ -765,11 +787,22 @@ function backDart(){
 function haptic(p){ if(DB.load('vibration',true) && navigator.vibrate){ try{navigator.vibrate(p);}catch(e){} } }
 function caller(text){ if(DB.load('sound',false) && window.speechSynthesis){ try{ speechSynthesis.cancel(); const u=new SpeechSynthesisUtterance(text); u.rate=0.95; speechSynthesis.speak(u);}catch(e){} } }
 function celebrateScore(score){
-  if(score>=180){ haptic([60,40,60,40,150]); caller('One hundred and eighty'); flash('180','c180'); }
+  if(score>=180){ haptic([60,40,60,40,150]); caller('One hundred and eighty'); flash('180','c180'); confetti(); }
   else if(score>=140){ haptic([50,40,90]); flash(String(score),'c140'); }
   else if(score>=100){ haptic([50]); flash(String(score),'c100'); }
 }
 function flash(text,cls){ const el=document.createElement('div'); el.className='celebrate'+(cls?' '+cls:''); el.textContent=text; document.body.appendChild(el); setTimeout(()=>el.remove(),1100); }
+function confetti(){
+  const colors=['#34D399','#38BDF8','#FBBF24','#F87171','#A78BFA'];
+  const wrap=document.createElement('div'); wrap.className='confetti';
+  for(let i=0;i<40;i++){ const p=document.createElement('i');
+    p.style.left=(Math.random()*100)+'%';
+    p.style.background=colors[i%colors.length];
+    p.style.animationDelay=(Math.random()*0.25)+'s';
+    p.style.animationDuration=(0.9+Math.random()*0.8)+'s';
+    wrap.appendChild(p); }
+  document.body.appendChild(wrap); setTimeout(()=>wrap.remove(),2200);
+}
 /* ---- återuppta match ---- */
 function resumeMatch(){ const c=DB.load('current',null); if(!c||!c.match){toast('Ingen match');return;}
   state.match=c.match; state.darts=c.darts||[]; state.mult=c.mult||'S'; go('game'); }
@@ -820,7 +853,7 @@ function startTraining(id){
   else if(id==='scoring') tr={id,kind:'scoring',title:'Scoring Challenge',rounds:10,scores:[],index:0};
   else if(id==='trebles') tr={id,kind:'seq',title:'Trebles Practice',seq:[20,19,18,17,16,15,14,13,12,11].map(n=>'T'+n),index:0,hits:0,throws:0};
   else if(id==='halveit') tr={id,kind:'halveit',title:'Halve-it',targets:['15','16','Dubbel','17','18','Trippel','19','20','Bull'],index:0,total:40};
-  else if(id==='shanghai') tr={id,kind:'shanghai',title:'Shanghai',numbers:[1,2,3,4,5,6,7],index:0,total:0,roundDarts:[],roundMults:{S:false,D:false,T:false},shanghai:false};
+  else if(id==='bob27') tr={id,kind:'bob27',title:"Bob's 27",targets:[...Array.from({length:20},(_,i)=>'D'+(i+1)),'Bull'],index:0,score:27,out:false};
   else return;
   state.training=tr; state.buffer=''; go('trainingActive');
 }
@@ -839,10 +872,22 @@ function genCheckouts(diff,count){
   }
   return out;
 }
-function repeatTraining(){ const tr=state.training; if(tr.kind==='checkout') startCheckout(tr.difficulty); else startTraining(tr.id); }
+function startShanghai(count){
+  state.training={id:'shanghai',kind:'shanghai',title:'Shanghai (1-'+count+')',count,
+    numbers:Array.from({length:count},(_,i)=>i+1),index:0,total:0,roundDarts:[],roundMults:{S:false,D:false,T:false},shanghai:false};
+  state.buffer=''; go('trainingActive');
+}
+function repeatTraining(){ const tr=state.training;
+  if(tr.kind==='checkout') startCheckout(tr.difficulty);
+  else if(tr.kind==='shanghai') startShanghai(tr.count);
+  else startTraining(tr.id); }
 function trainHit(hit){ const tr=state.training; tr.throws++; if(hit)tr.hits++; tr.index++; render(); }
 function cricketMark(n){ const tr=state.training; tr.marks+=n; tr.index++; render(); }
 function checkoutMark(ok){ const tr=state.training; tr.attempts++; if(ok)tr.success++; tr.index++; render(); }
+function bob27Mark(k){ const tr=state.training; const t=tr.targets[tr.index]; const val=t==='Bull'?50:2*parseInt(t.slice(1));
+  if(k>0) tr.score+=k*val; else tr.score-=val;
+  if(tr.score<=0){ tr.score=0; tr.out=true; tr.label=t; }
+  tr.index++; render(); }
 function scoringSubmit(){ const tr=state.training; if(state.buffer==='')return; let s=parseInt(state.buffer);
   if(isNaN(s))s=0; if(s>180){toast('Max 180');state.buffer='';render();return;}
   tr.scores.push(s); tr.index++; state.buffer=''; render(); }
@@ -856,7 +901,7 @@ function shanghaiHit(m){ const tr=state.training; if(tr.roundDarts.length>=3) re
   else if(m==='D'){ val=n*2; label='D'+n; tr.roundMults.D=true; }
   else if(m==='T'){ val=n*3; label='T'+n; tr.roundMults.T=true; }
   tr.roundDarts.push({val,label}); tr.total+=val;
-  if(tr.roundMults.S&&tr.roundMults.D&&tr.roundMults.T){ tr.shanghai=true; haptic([60,40,60,40,150]); caller('Shanghai'); flash('SHANGHAI!','word'); render(); return; }
+  if(tr.roundMults.S&&tr.roundMults.D&&tr.roundMults.T){ tr.shanghai=true; haptic([60,40,60,40,150]); caller('Shanghai'); flash('SHANGHAI!','word'); confetti(); render(); return; }
   if(tr.roundDarts.length>=3){ tr.index++; tr.roundDarts=[]; tr.roundMults={S:false,D:false,T:false}; }
   render(); }
 function shanghaiBack(){ const tr=state.training; if(tr.roundDarts.length>0){ const d=tr.roundDarts.pop(); tr.total-=d.val;
