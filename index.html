@@ -80,6 +80,19 @@
   .numpad button:active{transform:scale(.97)}
   .numpad .enter{background:var(--accent);color:var(--accent-ink);border:none}
   .numpad .back{color:var(--warn)}
+  /* dart-by-dart input */
+  .dartslots{display:flex;gap:8px;justify-content:center;padding:2px 16px 8px}
+  .dchip{min-width:54px;text-align:center;padding:7px 10px;border-radius:9px;border:1px dashed var(--border);color:var(--txt2);font-weight:600;font-size:15px}
+  .dchip.on{border-style:solid;border-color:var(--accent);color:var(--accent);background:rgba(52,211,153,.10)}
+  .multrow{display:flex;gap:8px;padding:2px 16px 6px}
+  .multbtn{flex:1;padding:13px 0;border-radius:12px;border:1px solid var(--border);background:var(--surface2);color:var(--txt);font-size:15px;font-weight:600;cursor:pointer}
+  .multbtn.on{background:var(--accent);color:var(--accent-ink);border:none}
+  .dartgrid{display:grid;grid-template-columns:repeat(5,1fr);gap:7px;padding:4px 16px}
+  .dartgrid button{padding:15px 0;font-size:18px;font-weight:600;border-radius:12px;border:1px solid var(--border);background:var(--surface2);color:var(--txt);cursor:pointer}
+  .dartgrid button:active{transform:scale(.96)}
+  .dartspecial{display:grid;grid-template-columns:repeat(4,1fr);gap:7px;padding:8px 16px 18px}
+  .dartspecial button{padding:15px 2px;font-size:14px;font-weight:600;border-radius:12px;border:1px solid var(--border);background:var(--surface2);color:var(--txt);cursor:pointer}
+  .dartspecial .back{color:var(--warn)}
   /* stats */
   .statgrid{display:grid;grid-template-columns:1fr 1fr;gap:10px}
   .stat{background:var(--surface2);border-radius:12px;padding:12px}
@@ -155,7 +168,7 @@ function simulate(match){
   for(const t of match.turns){
     if(finished) break;
     const p=cur, st=stats[p];
-    if(t.bust){ st.darts+=3; legDarts[p]+=3; cur=(cur+1)%n; continue; }
+    if(t.bust){ const dd=t.darts||3; st.darts+=dd; legDarts[p]+=dd; cur=(cur+1)%n; continue; }
     const newRem=rem[p]-t.score;
     st.score+=t.score; st.darts+=t.darts; legDarts[p]+=t.darts;
     if(t.score===180)st.c180++; if(t.score>=140)st.c140++;
@@ -180,7 +193,7 @@ function simulate(match){
 }
 
 /* ============================== app state & router ============================== */
-let state = { view:'home', match:null, buffer:'', setup:null, pendingCheckout:null, training:null };
+let state = { view:'home', match:null, buffer:'', setup:null, pendingCheckout:null, training:null, darts:[], mult:'S' };
 
 function go(v){ state.view=v; render(); }
 function toast(msg,ok=false){
@@ -275,37 +288,45 @@ function esc(s){ return String(s).replace(/"/g,'&quot;').replace(/</g,'&lt;'); }
 function viewGame(){
   const m=state.match, sim=simulate(m);
   if(sim.finished){ saveMatch(m,sim); state.view='summary'; return viewSummary(sim); }
-  const cur=sim.cur, rem=sim.rem[cur];
-  const buf=state.buffer;
-  const shown = buf!==''? buf : rem;
-  const co = buf===''? checkout(rem, m.config.outRule) : [];
-  const name = m.config.players[cur];
+  const cur=sim.cur;
+  const startRem=sim.rem[cur];
+  const used=state.darts.reduce((a,d)=>a+d.val,0);
+  const curRem=startRem-used;
+  const co=checkout(curRem, m.config.outRule, 3-state.darts.length);
+  const name=m.config.players[cur];
+  const slots=[0,1,2].map(i=>{ const d=state.darts[i];
+    return `<span class="dchip ${d?'on':''}">${d?d.label:'&middot;'}</span>`; }).join('');
+  const mult=state.mult;
   return `<div class="gametop">
       <button class="iconbtn" onclick="quitGame()" title="Avsluta">&times;</button>
       <div class="pill">Set ${sim.setNumber} &middot; Leg ${sim.legNumber}</div>
-      <button class="iconbtn" onclick="undo()" title="&Aring;ngra">&#8634;</button>
+      <button class="iconbtn" onclick="undo()" title="&Aring;ngra tur">&#8634;</button>
     </div>
     <div class="players">
       ${m.config.players.map((p,i)=>`<div class="pcard ${i===cur?'active':''}">
         <div class="nm">${esc(p)}</div>
-        <div class="pr">${sim.rem[i]}</div>
+        <div class="pr">${i===cur?curRem:sim.rem[i]}</div>
         <div class="meta">snitt ${fmt1(sim.stats[i].avg)} &middot; ${sim.legWins[i]}L</div>
       </div>`).join('')}
     </div>
-    <div class="scorehero">
+    <div class="scorehero" style="padding-bottom:2px">
       <div class="who">${esc(name)}</div>
-      <div class="rem ${buf!==''?'buffer':''}">${shown}</div>
+      <div class="rem">${curRem}</div>
       <div class="co">${co.map(x=>`<span class="x">${x}</span>`).join('')}</div>
     </div>
-    <div class="quick">
-      ${[26,41,45,60,81,85,100,140,180].map(v=>`<button onclick="quickScore(${v})">${v}</button>`).join('')}
-      <button onclick="quickScore(0)">Miss</button>
+    <div class="dartslots">${slots}</div>
+    <div class="multrow">
+      ${[['S','Singel'],['D','Dubbel'],['T','Tripple']].map(([k,l])=>
+        `<button class="multbtn ${mult===k?'on':''}" onclick="setMult('${k}')">${l}</button>`).join('')}
     </div>
-    <div class="numpad">
-      ${[1,2,3,4,5,6,7,8,9].map(d=>`<button onclick="press('${d}')">${d}</button>`).join('')}
-      <button class="back" onclick="press('back')">&#9003;</button>
-      <button onclick="press('0')">0</button>
-      <button class="enter" onclick="submitScore()">&#10003;</button>
+    <div class="dartgrid">
+      ${Array.from({length:20},(_,i)=>i+1).map(n=>`<button onclick="tapNumber(${n})">${n}</button>`).join('')}
+    </div>
+    <div class="dartspecial">
+      <button onclick="tapVal(50,'Bull',true)">Bull</button>
+      <button onclick="tapVal(25,'Outer',false)">Outer</button>
+      <button onclick="tapVal(0,'Miss',false)">Miss</button>
+      <button class="back" onclick="backDart()">&#9003; Tillbaka</button>
     </div>`;
 }
 
@@ -539,19 +560,19 @@ function startMatch(){
   DB.save('lastSetup',{startScore,outRule:s.outRule,sets:s.sets,legs:s.legs});
   DB.save('roster',players);
   state.match={config,turns:[],date:Date.now(),id:uid()};
-  state.buffer=''; state.setup=null;
+  state.buffer=''; state.setup=null; state.darts=[]; state.mult='S';
   go('game');
 }
 function quickStart(){
   const last=DB.load('lastSetup',{startScore:501,outRule:'double',sets:1,legs:3});
   const roster=DB.load('roster',['Spelare 1','Spelare 2']);
   state.match={config:{...last,players:[...roster]},turns:[],date:Date.now(),id:uid()};
-  state.buffer=''; go('game');
+  state.buffer=''; state.darts=[]; state.mult='S'; go('game');
 }
 function rematch(){
   const old=state.match;
   state.match={config:old.config,turns:[],date:Date.now(),id:uid()};
-  state.buffer=''; go('game');
+  state.buffer=''; state.darts=[]; state.mult='S'; go('game');
 }
 
 /* ============================== game actions ============================== */
@@ -596,8 +617,47 @@ function confirmCheckout(darts){
 }
 function undo(){
   const m=state.match;
+  if(state.darts.length>0){ state.darts=[]; state.mult='S'; render(); return; }
   if(!m.turns.length){ toast('Inget att &aring;ngra'); return; }
-  m.turns.pop(); state.buffer=''; render();
+  m.turns.pop(); state.mult='S'; render();
+}
+function setMult(k){ state.mult = state.mult===k? 'S' : k; render(); }
+function tapNumber(n){
+  const m=state.mult;
+  let val=n, label='S'+n, isDouble=false, isTreble=false;
+  if(m==='D'){ val=n*2; label='D'+n; isDouble=true; }
+  else if(m==='T'){ val=n*3; label='T'+n; isTreble=true; }
+  state.mult='S'; addDart({val,label,isDouble,isTreble});
+}
+function tapVal(val,label,isDouble){ state.mult='S'; addDart({val,label,isDouble,isTreble:false}); }
+function addDart(d){
+  const m=state.match, sim=simulate(m), cur=sim.cur;
+  const startRem=sim.rem[cur];
+  const used=state.darts.reduce((a,x)=>a+x.val,0);
+  const curRem=startRem-used;
+  const newRem=curRem-d.val;
+  const outR=m.config.outRule;
+  const validFinish = outR==='single' ? true : outR==='double' ? d.isDouble : (d.isDouble||d.isTreble);
+  const dartsThrown=state.darts.length+1;
+  if(newRem<0 || (newRem===1 && outR==='double') || (newRem===0 && !validFinish)){
+    m.turns.push({score:0,darts:dartsThrown,bust:true});
+    state.darts=[]; state.mult='S'; toast('Bust!'); render(); return;
+  }
+  if(newRem===0){
+    m.turns.push({score:used+d.val,darts:dartsThrown,checkout:true});
+    state.darts=[]; state.mult='S'; toast('Leg vunnen!',true); render(); return;
+  }
+  state.darts.push(d);
+  if(state.darts.length===3){
+    const sum=state.darts.reduce((a,x)=>a+x.val,0);
+    m.turns.push({score:sum,darts:3});
+    state.darts=[]; state.mult='S';
+  }
+  render();
+}
+function backDart(){
+  if(state.darts.length>0){ state.darts.pop(); render(); return; }
+  undo();
 }
 function quitGame(){
   if(confirm('Avsluta matchen? Den sparas inte.')){ state.match=null; go('home'); }
@@ -726,9 +786,9 @@ function exportPDF(){
 /* ============================== keyboard ============================== */
 document.addEventListener('keydown',e=>{
   const scoring = state.view==='trainingActive' && state.training && state.training.kind==='scoring';
-  if((state.view!=='game' && !scoring) || state.pendingCheckout) return;
+  if(!scoring || state.pendingCheckout) return;
   if(e.key>='0'&&e.key<='9') press(e.key);
-  else if(e.key==='Enter'){ scoring? scoringSubmit() : submitScore(); }
+  else if(e.key==='Enter'){ scoringSubmit(); }
   else if(e.key==='Backspace'){ e.preventDefault(); press('back'); }
 });
 
