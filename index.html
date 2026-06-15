@@ -96,6 +96,10 @@
   .recrow{display:flex;justify-content:space-between;align-items:center;padding:9px 0;border-bottom:1px solid var(--border)}
   .recrow:last-of-type{border-bottom:none}
   .recreset{width:30px;height:30px;border-radius:8px;border:1px solid var(--border);background:var(--surface2);color:var(--danger);font-size:16px;cursor:pointer}
+  .toggle{padding:7px 18px;border-radius:999px;border:1px solid var(--border);background:var(--surface2);color:var(--txt2);font-weight:600;cursor:pointer;font-size:13px}
+  .toggle.on{background:var(--accent);color:var(--accent-ink);border:none}
+  .celebrate{position:fixed;inset:0;display:flex;align-items:center;justify-content:center;z-index:80;font-size:96px;font-weight:800;color:var(--accent);pointer-events:none;animation:pop 1.1s ease-out forwards}
+  @keyframes pop{0%{transform:scale(.3);opacity:0}20%{transform:scale(1.12);opacity:1}70%{transform:scale(1);opacity:1}100%{transform:scale(1.25);opacity:0}}
   /* stats */
   .statgrid{display:grid;grid-template-columns:1fr 1fr;gap:10px}
   .stat{background:var(--surface2);border-radius:12px;padding:12px}
@@ -164,13 +168,16 @@ function simulate(match){
   const cfg=match.config, n=cfg.players.length;
   const rem=cfg.players.map(()=>cfg.startScore);
   const legDarts=cfg.players.map(()=>0);
-  const stats=cfg.players.map(()=>({score:0,darts:0,c180:0,c140:0,highCO:0,bestLeg:null,legsWon:0,setsWon:0}));
+  const stats=cfg.players.map(()=>({score:0,darts:0,c180:0,c140:0,highCO:0,bestLeg:null,legsWon:0,setsWon:0,doubleAtt:0,doubleHit:0}));
   let setWins=Array(n).fill(0), legWins=Array(n).fill(0);
   let legCount=0, cur=0, setNumber=1, finished=false, winner=null;
 
   for(const t of match.turns){
     if(finished) break;
     const p=cur, st=stats[p];
+    if(t.throws){ let rb=rem[p];
+      for(const td of t.throws){ const onD=(rb<=40&&rb%2===0)||rb===50;
+        if(onD){ st.doubleAtt++; if(td.db && rb-td.v===0) st.doubleHit++; } rb-=td.v; if(rb<0) break; } }
     if(t.bust){ const dd=t.darts||3; st.darts+=dd; legDarts[p]+=dd; cur=(cur+1)%n; continue; }
     const newRem=rem[p]-t.score;
     st.score+=t.score; st.darts+=t.darts; legDarts[p]+=t.darts;
@@ -221,7 +228,19 @@ function viewHome(){
   const hist=DB.load('matches',[]);
   const recent=hist.slice(-3).reverse();
   const last=DB.load('lastSetup', {startScore:501,outRule:'double',sets:1,legs:3});
+  const c=DB.load('current',null);
+  let resume='';
+  if(c && c.match){ const s=simulate(c.match);
+    if(!s.finished){ resume=`<div class="card" style="border-color:var(--sec)">
+      <div class="label">P&aring;g&aring;ende match</div>
+      <div style="font-weight:600;margin-bottom:4px">${esc(c.match.config.players.join('  vs  '))}</div>
+      <div class="muted" style="margin-bottom:14px">${c.match.config.startScore} &middot; ${ruleName(c.match.config.outRule)} out</div>
+      <button class="btn" onclick="resumeMatch()">&Aring;teruppta match</button>
+      <button class="btn ghost" style="margin-top:8px" onclick="discardCurrent()">Kasta</button>
+    </div>`; } else DB.save('current',null);
+  }
   return topbar()+`<div class="view">
+    ${resume}
     <div class="card" style="border-color:var(--accent)">
       <div class="label">Snabbstart</div>
       <div style="font-size:20px;font-weight:700;margin-bottom:4px">${last.startScore} &middot; ${ruleName(last.outRule)} out</div>
@@ -236,6 +255,16 @@ function viewHome(){
     <div class="label" style="margin-top:8px">Senaste matcher</div>
     ${recent.length? recent.map(histRow).join('') :
       '<div class="muted" style="padding:8px 2px">Inga matcher &auml;n &mdash; spela din f&ouml;rsta!</div>'}
+    <div class="card" style="margin-top:12px">
+      <div class="label">Inst&auml;llningar</div>
+      ${toggleRow('Ljud (caller)','sound',false)}
+      ${toggleRow('Vibration','vibration',true)}
+      <div class="row" style="gap:8px;margin-top:12px">
+        <button class="btn secondary" style="flex:1" onclick="exportBackup()">S&auml;kerhetskopiera</button>
+        <button class="btn secondary" style="flex:1" onclick="importBackupPrompt()">&Aring;terst&auml;ll</button>
+      </div>
+      <input type="file" id="restoreFile" accept="application/json" style="display:none" onchange="if(this.files[0])importBackup(this.files[0])">
+    </div>
   </div>`;
 }
 
@@ -352,6 +381,7 @@ function viewSummary(sim){
         <div class="stat"><div class="v">${st.highCO||'—'}</div><div class="k">H&ouml;gsta checkout</div></div>
         <div class="stat"><div class="v">${st.bestLeg||'—'}</div><div class="k">B&auml;sta leg (pilar)</div></div>
         <div class="stat"><div class="v">${st.c140}</div><div class="k">140+</div></div>
+        <div class="stat"><div class="v">${st.doubleAtt? Math.round(st.doubleHit/st.doubleAtt*100)+'%':'—'}</div><div class="k">Checkout %</div></div>
       </div></div>`;}).join('')}
     <button class="btn" onclick="rematch()">Revansch (samma inst&auml;llningar)</button>
     <button class="btn secondary" style="margin-top:8px" onclick="state.match=null;go('home')">Till start</button>
@@ -361,16 +391,7 @@ function viewSummary(sim){
 function viewStats(){
   const hist=DB.load('matches',[]);
   if(!hist.length) return topbar('Statistik')+`<div class="view"><div class="empty"><div class="big">&#128202;</div>Ingen statistik &auml;n.<br>Spela en match f&ouml;rst!</div></div>`;
-  const agg={};
-  for(const m of hist){ const sim=simulate(m);
-    m.config.players.forEach((p,i)=>{ const st=sim.stats[i];
-      const a=agg[p]||(agg[p]={score:0,darts:0,c180:0,c140:0,highCO:0,bestLeg:null,legsWon:0,setsWon:0,matches:0,wins:0});
-      a.score+=st.score; a.darts+=st.darts; a.c180+=st.c180; a.c140+=st.c140;
-      a.highCO=Math.max(a.highCO,st.highCO); a.legsWon+=st.legsWon; a.setsWon+=st.setsWon; a.matches++;
-      if(st.bestLeg!=null) a.bestLeg = a.bestLeg==null?st.bestLeg:Math.min(a.bestLeg,st.bestLeg);
-      if(sim.winner===i) a.wins++;
-    });
-  }
+  const agg=aggStats(hist);
   return topbar('Statistik')+`<div class="view">
     <div class="row" style="gap:8px;margin-bottom:12px">
       <button class="btn secondary" style="flex:1" onclick="exportCSV()">&#11015; CSV</button>
@@ -388,6 +409,7 @@ function viewStats(){
         <div class="stat"><div class="v">${a.c140}</div><div class="k">140+</div></div>
         <div class="stat"><div class="v">${a.highCO||'—'}</div><div class="k">H&ouml;gsta checkout</div></div>
         <div class="stat"><div class="v">${a.bestLeg||'—'}</div><div class="k">B&auml;sta leg</div></div>
+        <div class="stat"><div class="v">${a.doubleAtt? Math.round(a.doubleHit/a.doubleAtt*100)+'%':'—'}</div><div class="k">Checkout %</div></div>
       </div>
       <div class="label" style="margin-top:14px">Snittutveckling per match</div>
       ${sparkSVG(playerAvgSeries(hist,name))}
@@ -542,6 +564,7 @@ function render(){
     default: html=viewHome();
   }
   app.innerHTML=html+navbar();
+  if(state.view==='game' && state.match) DB.save('current',{match:state.match,darts:state.darts,mult:state.mult});
   if(state.pendingCheckout) renderCheckoutSheet();
 }
 
@@ -643,18 +666,20 @@ function addDart(d){
   const outR=m.config.outRule;
   const validFinish = outR==='single' ? true : outR==='double' ? d.isDouble : (d.isDouble||d.isTreble);
   const dartsThrown=state.darts.length+1;
+  const throwsArr=[...state.darts,d].map(x=>({v:x.val,db:!!x.isDouble}));
   if(newRem<0 || (newRem===1 && outR==='double') || (newRem===0 && !validFinish)){
-    m.turns.push({score:0,darts:dartsThrown,bust:true});
-    state.darts=[]; state.mult='S'; toast('Bust!'); render(); return;
+    m.turns.push({score:0,darts:dartsThrown,bust:true,throws:throwsArr});
+    state.darts=[]; state.mult='S'; toast('Bust!'); haptic([200]); render(); return;
   }
   if(newRem===0){
-    m.turns.push({score:used+d.val,darts:dartsThrown,checkout:true});
-    state.darts=[]; state.mult='S'; toast('Leg vunnen!',true); render(); return;
+    m.turns.push({score:used+d.val,darts:dartsThrown,checkout:true,throws:throwsArr});
+    state.darts=[]; state.mult='S'; toast('Leg vunnen!',true); haptic([120]); caller('Game shot'); render(); return;
   }
   state.darts.push(d);
   if(state.darts.length===3){
     const sum=state.darts.reduce((a,x)=>a+x.val,0);
-    m.turns.push({score:sum,darts:3});
+    m.turns.push({score:sum,darts:3,throws:state.darts.map(x=>({v:x.val,db:!!x.isDouble}))});
+    if(sum===180) celebrate180();
     state.darts=[]; state.mult='S';
   }
   render();
@@ -663,12 +688,46 @@ function backDart(){
   if(state.darts.length>0){ state.darts.pop(); render(); return; }
   undo();
 }
+/* ---- firande, haptik & ljud ---- */
+function haptic(p){ if(DB.load('vibration',true) && navigator.vibrate){ try{navigator.vibrate(p);}catch(e){} } }
+function caller(text){ if(DB.load('sound',false) && window.speechSynthesis){ try{ speechSynthesis.cancel(); const u=new SpeechSynthesisUtterance(text); u.rate=0.95; speechSynthesis.speak(u);}catch(e){} } }
+function celebrate180(){ haptic([60,40,60,40,150]); caller('One hundred and eighty'); flash('180'); }
+function flash(text){ const el=document.createElement('div'); el.className='celebrate'; el.textContent=text; document.body.appendChild(el); setTimeout(()=>el.remove(),1100); }
+/* ---- återuppta match ---- */
+function resumeMatch(){ const c=DB.load('current',null); if(!c||!c.match){toast('Ingen match');return;}
+  state.match=c.match; state.darts=c.darts||[]; state.mult=c.mult||'S'; go('game'); }
+function discardCurrent(){ if(confirm('Kasta p&aring;g&aring;ende match?')){ DB.save('current',null); render(); } }
+/* ---- inställningar & säkerhetskopiering ---- */
+function toggleSetting(key,def){ DB.save(key, !DB.load(key,def)); render(); }
+function toggleRow(label,key,def){ const on=DB.load(key,def);
+  return `<div class="recrow"><span>${label}</span>
+    <button class="toggle ${on?'on':''}" onclick="toggleSetting('${key}',${def})">${on?'P&aring;':'Av'}</button></div>`; }
+function exportBackup(){
+  const keys=['matches','training','roster','lastSetup','theme','sound','vibration'];
+  const data={_app:'oche',_v:1,_date:Date.now()};
+  keys.forEach(k=>{ data[k]=DB.load(k,null); });
+  download('oche-backup-'+new Date().toISOString().slice(0,10)+'.json',
+    new Blob([JSON.stringify(data,null,2)],{type:'application/json'}));
+  toast('S&auml;kerhetskopia skapad',true);
+}
+function importBackupPrompt(){ const el=document.getElementById('restoreFile'); if(el) el.click(); }
+function importBackup(file){
+  const r=new FileReader();
+  r.onload=()=>{ try{ const data=JSON.parse(r.result);
+    if(!data || data._app!=='oche'){ toast('Ogiltig backupfil'); return; }
+    if(!confirm('Detta ers&auml;tter all nuvarande data. Forts&auml;tta?')) return;
+    ['matches','training','roster','lastSetup','theme','sound','vibration'].forEach(k=>{ if(data[k]!=null) DB.save(k,data[k]); });
+    setTheme(DB.load('theme','dark')); toast('Data &aring;terst&auml;lld',true); go('home');
+  }catch(e){ toast('Kunde inte l&auml;sa filen'); } };
+  r.readAsText(file);
+}
 function quitGame(){
-  if(confirm('Avsluta matchen? Den sparas inte.')){ state.match=null; go('home'); }
+  if(confirm('Avsluta matchen? Den sparas inte.')){ state.match=null; DB.save('current',null); go('home'); }
 }
 function saveMatch(m,sim){
   if(m.saved) return; m.saved=true;
   const hist=DB.load('matches',[]); hist.push({...m}); DB.save('matches',hist);
+  DB.save('current',null);
 }
 function clearHistory(){
   if(confirm('Radera ALL matchhistorik och statistik?')){ DB.save('matches',[]); render(); toast('Historik rensad',true); }
@@ -746,9 +805,10 @@ function aggStats(hist){
   const agg={};
   for(const m of hist){ const sim=simulate(m);
     m.config.players.forEach((p,i)=>{ const st=sim.stats[i];
-      const a=agg[p]||(agg[p]={score:0,darts:0,c180:0,c140:0,highCO:0,bestLeg:null,legsWon:0,setsWon:0,matches:0,wins:0});
+      const a=agg[p]||(agg[p]={score:0,darts:0,c180:0,c140:0,highCO:0,bestLeg:null,legsWon:0,setsWon:0,matches:0,wins:0,doubleAtt:0,doubleHit:0});
       a.score+=st.score; a.darts+=st.darts; a.c180+=st.c180; a.c140+=st.c140;
       a.highCO=Math.max(a.highCO,st.highCO); a.legsWon+=st.legsWon; a.setsWon+=st.setsWon; a.matches++;
+      a.doubleAtt+=st.doubleAtt; a.doubleHit+=st.doubleHit;
       if(st.bestLeg!=null) a.bestLeg = a.bestLeg==null?st.bestLeg:Math.min(a.bestLeg,st.bestLeg);
       if(sim.winner===i) a.wins++;
     });
@@ -779,11 +839,11 @@ function download(name, blob){
 }
 function exportCSV(){
   const hist=DB.load('matches',[]); if(!hist.length){toast('Ingen data');return;}
-  const rows=[['Datum','Spelare','Start','Ut-regel','3-pilssnitt','180','140+','Hogsta checkout','Basta leg','Vunna legs','Vunna sets','Vinnare']];
+  const rows=[['Datum','Spelare','Start','Ut-regel','3-pilssnitt','180','140+','Checkout%','Hogsta checkout','Basta leg','Vunna legs','Vunna sets','Vinnare']];
   hist.forEach(m=>{ const sim=simulate(m);
     m.config.players.forEach((p,i)=>{ const st=sim.stats[i];
       rows.push([new Date(m.date).toLocaleString('sv-SE'),p,m.config.startScore,ruleName(m.config.outRule),
-        fmt1(st.avg),st.c180,st.c140,st.highCO,st.bestLeg||'',st.legsWon,st.setsWon, sim.winner===i?'JA':'']);
+        fmt1(st.avg),st.c180,st.c140,(st.doubleAtt?Math.round(st.doubleHit/st.doubleAtt*100)+'%':''),st.highCO,st.bestLeg||'',st.legsWon,st.setsWon, sim.winner===i?'JA':'']);
     });
   });
   const csv=rows.map(r=>r.map(c=>`"${String(c).replace(/"/g,'""')}"`).join(';')).join('\r\n');
@@ -794,14 +854,14 @@ function exportPDF(){
   const hist=DB.load('matches',[]); if(!hist.length){toast('Ingen data');return;}
   const agg=aggStats(hist);
   const rows=Object.entries(agg).sort((a,b)=>b[1].matches-a[1].matches).map(([n,a])=>
-    `<tr><td>${n}</td><td>${a.matches}</td><td>${a.wins}</td><td>${fmt1(a.darts?a.score/a.darts*3:0)}</td><td>${a.c180}</td><td>${a.c140}</td><td>${a.highCO||'-'}</td><td>${a.bestLeg||'-'}</td><td>${a.legsWon}</td></tr>`).join('');
+    `<tr><td>${n}</td><td>${a.matches}</td><td>${a.wins}</td><td>${fmt1(a.darts?a.score/a.darts*3:0)}</td><td>${a.c180}</td><td>${a.c140}</td><td>${a.doubleAtt?Math.round(a.doubleHit/a.doubleAtt*100)+'%':'-'}</td><td>${a.highCO||'-'}</td><td>${a.bestLeg||'-'}</td><td>${a.legsWon}</td></tr>`).join('');
   const html=`<!DOCTYPE html><html lang="sv"><head><meta charset="utf-8"><title>Oche statistik</title>
     <style>body{font-family:Arial,Helvetica,sans-serif;color:#111;padding:28px}h1{color:#0E9F6E;margin:0}
     p{color:#555}table{border-collapse:collapse;width:100%;margin-top:14px}
     th,td{border:1px solid #ccc;padding:8px 10px;text-align:left;font-size:13px}th{background:#f2f2f2}</style></head>
     <body><h1>Oche &mdash; Statistikrapport</h1>
     <p>Genererad ${new Date().toLocaleString('sv-SE')} &middot; ${hist.length} matcher</p>
-    <table><thead><tr><th>Spelare</th><th>Matcher</th><th>Vinster</th><th>3-pilssnitt</th><th>180</th><th>140+</th><th>Hogsta CO</th><th>Basta leg</th><th>Vunna legs</th></tr></thead>
+    <table><thead><tr><th>Spelare</th><th>Matcher</th><th>Vinster</th><th>3-pilssnitt</th><th>180</th><th>140+</th><th>Checkout%</th><th>Hogsta CO</th><th>Basta leg</th><th>Vunna legs</th></tr></thead>
     <tbody>${rows}</tbody></table></body></html>`;
   const w=window.open('','_blank');
   if(!w){ toast('Till&aring;t popup f&ouml;r PDF'); return; }
