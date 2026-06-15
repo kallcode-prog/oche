@@ -110,6 +110,9 @@
   .toggle.on{background:var(--accent);color:var(--accent-ink);border:none}
   .celebrate{position:fixed;inset:0;display:flex;align-items:center;justify-content:center;z-index:80;font-size:96px;font-weight:800;color:var(--accent);pointer-events:none;animation:pop 1.1s ease-out forwards}
   @keyframes pop{0%{transform:scale(.3);opacity:0}20%{transform:scale(1.12);opacity:1}70%{transform:scale(1);opacity:1}100%{transform:scale(1.25);opacity:0}}
+  .celebrate.c140{color:var(--sec);font-size:84px}
+  .celebrate.c100{color:var(--warn);font-size:72px}
+  .celebrate.word{font-size:44px;font-weight:700;color:var(--accent)}
   /* stats */
   .statgrid{display:grid;grid-template-columns:1fr 1fr;gap:10px}
   .stat{background:var(--surface2);border-radius:12px;padding:12px}
@@ -469,7 +472,10 @@ function viewTraining(){
     ['cricket','&#127919;','Cricket Training','15&ndash;20 + Bull','%'],
     ['scoring','&#128200;','Scoring Challenge','Max po&auml;ng p&aring; 10 rundor','p'],
     ['doubles','&#9211;','Doubles Practice','Tr&auml;na p&aring; dubblar','%'],
+    ['trebles','&#9650;','Trebles Practice','Tr&auml;na p&aring; treble-f&auml;lten','%'],
     ['bulls','&#9678;','Bulls Practice','Tr&auml;na p&aring; bullseye','%'],
+    ['shanghai','&#11088;','Shanghai','Single + dubbel + trippel = vinst!','p'],
+    ['halveit','&#9889;','Halve-it','Missar du halveras po&auml;ngen','p'],
   ];
   return topbar('Tr&auml;ning')+`<div class="view">
     ${modes.map(([id,ic,t,d,u])=>`<div class="menuitem" onclick="startTraining('${id}')">
@@ -531,6 +537,8 @@ function viewTrainingActive(){
     case 'cricket': return ttCricket(tr);
     case 'scoring': return ttScoring(tr);
     case 'checkout': return ttCheckout(tr);
+    case 'halveit': return ttHalveit(tr);
+    case 'shanghai': return ttShanghai(tr);
     default: return ttSeq(tr);
   }
 }
@@ -572,6 +580,33 @@ function ttCheckout(tr){
       <button class="btn" onclick="checkoutMark(true)">&#10003; Lyckades</button>
       <button class="btn secondary" style="margin-top:10px" onclick="checkoutMark(false)">&times; Missade</button>
     </div>`;
+}
+function ttHalveit(tr){
+  if(tr.index>=tr.targets.length){ saveTrainingResult('halveit',tr.title,tr.total); return ttResult(tr, tr.targets.length+' rundor klara', tr.total+' p'); }
+  const buf=state.buffer;
+  return thead(tr,'Runda '+(tr.index+1)+'/'+tr.targets.length) +
+    `<div class="scorehero"><div class="who">Sikta p&aring; ${tr.targets[tr.index]} &middot; po&auml;ng ${tr.total}</div>
+      <div class="rem ${buf!==''?'buffer':''}">${buf!==''?buf:0}</div>
+      <div class="muted">Missar du (0) halveras po&auml;ngen</div></div>` +
+    numpadHTML('halveitSubmit');
+}
+function ttShanghai(tr){
+  if(tr.shanghai){ saveTrainingResult('shanghai',tr.title,tr.total); return ttResult(tr, 'Single + dubbel + trippel!', tr.total+' p'); }
+  if(tr.index>=tr.numbers.length){ saveTrainingResult('shanghai',tr.title,tr.total); return ttResult(tr, tr.numbers.length+' nummer klara', tr.total+' p'); }
+  const n=tr.numbers[tr.index];
+  const slots=[0,1,2].map(i=>{ const d=tr.roundDarts[i]; return `<span class="dchip ${d!=null?'on':''}">${d!=null?d.label:'&middot;'}</span>`; }).join('');
+  return thead(tr,'Nummer '+(tr.index+1)+'/'+tr.numbers.length+' &middot; '+tr.total+' p') +
+    `<div class="scorehero" style="padding-bottom:2px"><div class="who">Sikta p&aring;</div><div class="atc-target">${n}</div></div>
+     <div class="dartslots">${slots}</div>
+     <div class="multrow">
+       <button class="multbtn" onclick="shanghaiHit('S')">Single</button>
+       <button class="multbtn" onclick="shanghaiHit('D')">Dubbel</button>
+       <button class="multbtn" onclick="shanghaiHit('T')">Trippel</button>
+     </div>
+     <div class="dartspecial" style="grid-template-columns:1fr 1fr">
+       <button onclick="shanghaiHit('M')">Miss</button>
+       <button class="back" onclick="shanghaiBack()">&#9003; Tillbaka</button>
+     </div>`;
 }
 
 /* ============================== nav ============================== */
@@ -707,14 +742,17 @@ function addDart(d){
     state.darts=[]; state.mult='S'; toast('Bust!'); haptic([200]); render(); return;
   }
   if(newRem===0){
-    m.turns.push({score:used+d.val,darts:dartsThrown,checkout:true,throws:throwsArr});
-    state.darts=[]; state.mult='S'; toast('Leg vunnen!',true); haptic([120]); caller('Game shot'); render(); return;
+    const coScore=used+d.val;
+    m.turns.push({score:coScore,darts:dartsThrown,checkout:true,throws:throwsArr});
+    state.darts=[]; state.mult='S'; toast('Leg vunnen!',true); haptic([120]); caller('Game shot');
+    if(coScore>=100) celebrateScore(coScore);
+    render(); return;
   }
   state.darts.push(d);
   if(state.darts.length===3){
     const sum=state.darts.reduce((a,x)=>a+x.val,0);
     m.turns.push({score:sum,darts:3,throws:state.darts.map(x=>({v:x.val,db:!!x.isDouble}))});
-    if(sum===180) celebrate180();
+    celebrateScore(sum);
     state.darts=[]; state.mult='S';
   }
   render();
@@ -726,8 +764,12 @@ function backDart(){
 /* ---- firande, haptik & ljud ---- */
 function haptic(p){ if(DB.load('vibration',true) && navigator.vibrate){ try{navigator.vibrate(p);}catch(e){} } }
 function caller(text){ if(DB.load('sound',false) && window.speechSynthesis){ try{ speechSynthesis.cancel(); const u=new SpeechSynthesisUtterance(text); u.rate=0.95; speechSynthesis.speak(u);}catch(e){} } }
-function celebrate180(){ haptic([60,40,60,40,150]); caller('One hundred and eighty'); flash('180'); }
-function flash(text){ const el=document.createElement('div'); el.className='celebrate'; el.textContent=text; document.body.appendChild(el); setTimeout(()=>el.remove(),1100); }
+function celebrateScore(score){
+  if(score>=180){ haptic([60,40,60,40,150]); caller('One hundred and eighty'); flash('180','c180'); }
+  else if(score>=140){ haptic([50,40,90]); flash(String(score),'c140'); }
+  else if(score>=100){ haptic([50]); flash(String(score),'c100'); }
+}
+function flash(text,cls){ const el=document.createElement('div'); el.className='celebrate'+(cls?' '+cls:''); el.textContent=text; document.body.appendChild(el); setTimeout(()=>el.remove(),1100); }
 /* ---- återuppta match ---- */
 function resumeMatch(){ const c=DB.load('current',null); if(!c||!c.match){toast('Ingen match');return;}
   state.match=c.match; state.darts=c.darts||[]; state.mult=c.mult||'S'; go('game'); }
@@ -776,6 +818,9 @@ function startTraining(id){
   else if(id==='doubles') tr={id,kind:'seq',title:'Doubles Practice',seq:[20,16,18,17,19,15,11,14,13,12].map(n=>'D'+n),index:0,hits:0,throws:0};
   else if(id==='cricket') tr={id,kind:'cricket',title:'Cricket Training',targets:['20','19','18','17','16','15','Bull'],index:0,marks:0};
   else if(id==='scoring') tr={id,kind:'scoring',title:'Scoring Challenge',rounds:10,scores:[],index:0};
+  else if(id==='trebles') tr={id,kind:'seq',title:'Trebles Practice',seq:[20,19,18,17,16,15,14,13,12,11].map(n=>'T'+n),index:0,hits:0,throws:0};
+  else if(id==='halveit') tr={id,kind:'halveit',title:'Halve-it',targets:['15','16','Dubbel','17','18','Trippel','19','20','Bull'],index:0,total:40};
+  else if(id==='shanghai') tr={id,kind:'shanghai',title:'Shanghai',numbers:[1,2,3,4,5,6,7],index:0,total:0,roundDarts:[],roundMults:{S:false,D:false,T:false},shanghai:false};
   else return;
   state.training=tr; state.buffer=''; go('trainingActive');
 }
@@ -801,6 +846,21 @@ function checkoutMark(ok){ const tr=state.training; tr.attempts++; if(ok)tr.succ
 function scoringSubmit(){ const tr=state.training; if(state.buffer==='')return; let s=parseInt(state.buffer);
   if(isNaN(s))s=0; if(s>180){toast('Max 180');state.buffer='';render();return;}
   tr.scores.push(s); tr.index++; state.buffer=''; render(); }
+function halveitSubmit(){ const tr=state.training; if(state.buffer==='')return; let s=parseInt(state.buffer);
+  if(isNaN(s))s=0; if(s>180){toast('Max 180');state.buffer='';render();return;}
+  if(s===0){ tr.total=Math.floor(tr.total/2); toast('Halverat!'); haptic([200]); } else { tr.total+=s; if(s>=100) celebrateScore(s); }
+  tr.index++; state.buffer=''; render(); }
+function shanghaiHit(m){ const tr=state.training; if(tr.roundDarts.length>=3) return; const n=tr.numbers[tr.index];
+  let val=0,label='Miss';
+  if(m==='S'){ val=n; label='S'+n; tr.roundMults.S=true; }
+  else if(m==='D'){ val=n*2; label='D'+n; tr.roundMults.D=true; }
+  else if(m==='T'){ val=n*3; label='T'+n; tr.roundMults.T=true; }
+  tr.roundDarts.push({val,label}); tr.total+=val;
+  if(tr.roundMults.S&&tr.roundMults.D&&tr.roundMults.T){ tr.shanghai=true; haptic([60,40,60,40,150]); caller('Shanghai'); flash('SHANGHAI!','word'); render(); return; }
+  if(tr.roundDarts.length>=3){ tr.index++; tr.roundDarts=[]; tr.roundMults={S:false,D:false,T:false}; }
+  render(); }
+function shanghaiBack(){ const tr=state.training; if(tr.roundDarts.length>0){ const d=tr.roundDarts.pop(); tr.total-=d.val;
+  tr.roundMults={S:false,D:false,T:false}; tr.roundDarts.forEach(x=>{ const c=x.label[0]; if(c==='S')tr.roundMults.S=true; if(c==='D')tr.roundMults.D=true; if(c==='T')tr.roundMults.T=true; }); render(); } }
 function saveTrainingResult(modeId,title,score){
   const tr=state.training; if(!tr||tr.saved)return; tr.saved=true;
   const hist=DB.load('training',[]);
@@ -993,10 +1053,11 @@ function exportPDF(){
 
 /* ============================== keyboard ============================== */
 document.addEventListener('keydown',e=>{
-  const scoring = state.view==='trainingActive' && state.training && state.training.kind==='scoring';
-  if(!scoring || state.pendingCheckout) return;
+  const k = (state.view==='trainingActive' && state.training) ? state.training.kind : null;
+  const numEntry = (k==='scoring' || k==='halveit');
+  if(!numEntry || state.pendingCheckout) return;
   if(e.key>='0'&&e.key<='9') press(e.key);
-  else if(e.key==='Enter'){ scoringSubmit(); }
+  else if(e.key==='Enter'){ k==='halveit'? halveitSubmit() : scoringSubmit(); }
   else if(e.key==='Backspace'){ e.preventDefault(); press('back'); }
 });
 
