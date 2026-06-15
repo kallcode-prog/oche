@@ -487,8 +487,14 @@ function viewTraining(){
       ${pbs[id]!=null?`<span class="badge">PB ${pbs[id]}${u}</span>`:''}
     </div>`).join('')}
     <div class="card">
-      <div class="label">Checkout Training</div>
-      <div class="muted" style="margin-bottom:10px;text-transform:none;letter-spacing:0">Slumpade utg&aring;ngar &middot; v&auml;lj sv&aring;righetsgrad${pbs.checkout!=null?' &middot; PB '+pbs.checkout+'%':''}</div>
+      <div style="display:flex;align-items:center;gap:12px;margin-bottom:12px">
+        <span style="font-size:22px;width:30px;text-align:center">&#127937;</span>
+        <div style="flex:1">
+          <div style="font-size:16px;font-weight:500">Checkout Training</div>
+          <div class="muted" style="text-transform:none;letter-spacing:0">Slumpade utg&aring;ngar &middot; v&auml;lj sv&aring;righetsgrad</div>
+        </div>
+        ${pbs.checkout!=null?`<span class="badge">PB ${pbs.checkout}%</span>`:''}
+      </div>
       <div class="chips">
         <div class="chip" onclick="startCheckout('latt')">L&auml;tt</div>
         <div class="chip" onclick="startCheckout('medel')">Medel</div>
@@ -496,8 +502,14 @@ function viewTraining(){
       </div>
     </div>
     <div class="card">
-      <div class="label">Shanghai</div>
-      <div class="muted" style="margin-bottom:10px;text-transform:none;letter-spacing:0">Single + dubbel + trippel p&aring; samma nummer = vinst!${pbs.shanghai!=null?' &middot; PB '+pbs.shanghai+'p':''}</div>
+      <div style="display:flex;align-items:center;gap:12px;margin-bottom:12px">
+        <span style="font-size:22px;width:30px;text-align:center">&#11088;</span>
+        <div style="flex:1">
+          <div style="font-size:16px;font-weight:500">Shanghai</div>
+          <div class="muted" style="text-transform:none;letter-spacing:0">Single + dubbel + trippel = vinst!</div>
+        </div>
+        ${pbs.shanghai!=null?`<span class="badge">PB ${pbs.shanghai}p</span>`:''}
+      </div>
       <div class="chips">
         <div class="chip" onclick="startShanghai(7)">1&ndash;7</div>
         <div class="chip" onclick="startShanghai(20)">1&ndash;20</div>
