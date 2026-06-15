@@ -93,6 +93,9 @@
   .dartspecial{display:grid;grid-template-columns:repeat(4,1fr);gap:7px;padding:8px 16px 18px}
   .dartspecial button{padding:15px 2px;font-size:14px;font-weight:600;border-radius:12px;border:1px solid var(--border);background:var(--surface2);color:var(--txt);cursor:pointer}
   .dartspecial .back{color:var(--warn)}
+  .recrow{display:flex;justify-content:space-between;align-items:center;padding:9px 0;border-bottom:1px solid var(--border)}
+  .recrow:last-of-type{border-bottom:none}
+  .recreset{width:30px;height:30px;border-radius:8px;border:1px solid var(--border);background:var(--surface2);color:var(--danger);font-size:16px;cursor:pointer}
   /* stats */
   .statgrid{display:grid;grid-template-columns:1fr 1fr;gap:10px}
   .stat{background:var(--surface2);border-radius:12px;padding:12px}
@@ -428,6 +431,7 @@ function viewTraining(){
         <div class="chip" onclick="startCheckout('svar')">Sv&aring;r</div>
       </div>
     </div>
+    ${recordsCard(pbs)}
   </div>`;
 }
 
@@ -713,6 +717,28 @@ function trainingPBs(){
   const hist=DB.load('training',[]); const pb={};
   hist.forEach(h=>{ pb[h.id] = pb[h.id]==null? h.score : Math.max(pb[h.id],h.score); });
   return pb;
+}
+function recordsCard(pbs){
+  const labels={atc:'Around the Clock',cricket:'Cricket',scoring:'Scoring Challenge',doubles:'Doubles',bulls:'Bulls',checkout:'Checkout'};
+  const ids=Object.keys(labels).filter(id=>pbs[id]!=null);
+  return `<div class="card">
+    <div class="label">Personliga rekord</div>
+    ${ids.length? ids.map(id=>`<div class="recrow">
+      <span>${labels[id]}</span>
+      <span class="row" style="gap:10px"><span class="badge">PB ${pbs[id]}${id==='scoring'?'p':'%'}</span>
+      <button class="recreset" onclick="resetTrainingPB('${id}')" title="Nollst&auml;ll">&times;</button></span>
+    </div>`).join('') : '<div class="muted" style="text-transform:none;letter-spacing:0">Inga rekord &auml;n &mdash; tr&auml;na ett pass!</div>'}
+    ${ids.length?`<button class="btn danger" style="margin-top:12px" onclick="resetAllTrainingPB()">Nollst&auml;ll alla rekord</button>`:''}
+  </div>`;
+}
+function resetTrainingPB(id){
+  if(!confirm('Nollst&auml;lla rekordet f&ouml;r detta l&auml;ge?')) return;
+  const hist=DB.load('training',[]).filter(h=>h.id!==id);
+  DB.save('training',hist); toast('Rekord nollst&auml;llt',true); render();
+}
+function resetAllTrainingPB(){
+  if(!confirm('Nollst&auml;lla ALLA tr&auml;ningsrekord?')) return;
+  DB.save('training',[]); toast('Alla rekord nollst&auml;llda',true); render();
 }
 
 /* ============================== statistik-hjälp & export ============================== */
