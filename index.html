@@ -580,9 +580,9 @@ function rmPlayer(i){ state.setup.players.splice(i,1); render(); }
 function startMatch(){
   const s=state.setup;
   const players=s.players.map(p=>p.trim()).filter(Boolean);
-  if(!players.length){ toast('L&auml;gg till minst en spelare'); return; }
+  if(!players.length){ toast('Lägg till minst en spelare'); return; }
   const startScore = s.custom? (parseInt(s.custom)||501) : s.startScore;
-  if(startScore<2){ toast('Ogiltigt startv&auml;rde'); return; }
+  if(startScore<2){ toast('Ogiltigt startvärde'); return; }
   const config={startScore,outRule:s.outRule,sets:s.sets,legs:s.legs,players};
   DB.save('lastSetup',{startScore,outRule:s.outRule,sets:s.sets,legs:s.legs});
   DB.save('roster',players);
@@ -645,7 +645,7 @@ function confirmCheckout(darts){
 function undo(){
   const m=state.match;
   if(state.darts.length>0){ state.darts=[]; state.mult='S'; render(); return; }
-  if(!m.turns.length){ toast('Inget att &aring;ngra'); return; }
+  if(!m.turns.length){ toast('Inget att ångra'); return; }
   m.turns.pop(); state.mult='S'; render();
 }
 function setMult(k){ state.mult = state.mult===k? 'S' : k; render(); }
@@ -696,7 +696,7 @@ function flash(text){ const el=document.createElement('div'); el.className='cele
 /* ---- återuppta match ---- */
 function resumeMatch(){ const c=DB.load('current',null); if(!c||!c.match){toast('Ingen match');return;}
   state.match=c.match; state.darts=c.darts||[]; state.mult=c.mult||'S'; go('game'); }
-function discardCurrent(){ if(confirm('Kasta p&aring;g&aring;ende match?')){ DB.save('current',null); render(); } }
+function discardCurrent(){ if(confirm('Kasta pågående match?')){ DB.save('current',null); render(); } }
 /* ---- inställningar & säkerhetskopiering ---- */
 function toggleSetting(key,def){ DB.save(key, !DB.load(key,def)); render(); }
 function toggleRow(label,key,def){ const on=DB.load(key,def);
@@ -708,17 +708,17 @@ function exportBackup(){
   keys.forEach(k=>{ data[k]=DB.load(k,null); });
   download('oche-backup-'+new Date().toISOString().slice(0,10)+'.json',
     new Blob([JSON.stringify(data,null,2)],{type:'application/json'}));
-  toast('S&auml;kerhetskopia skapad',true);
+  toast('Säkerhetskopia skapad',true);
 }
 function importBackupPrompt(){ const el=document.getElementById('restoreFile'); if(el) el.click(); }
 function importBackup(file){
   const r=new FileReader();
   r.onload=()=>{ try{ const data=JSON.parse(r.result);
     if(!data || data._app!=='oche'){ toast('Ogiltig backupfil'); return; }
-    if(!confirm('Detta ers&auml;tter all nuvarande data. Forts&auml;tta?')) return;
+    if(!confirm('Detta ersätter all nuvarande data. Fortsätta?')) return;
     ['matches','training','roster','lastSetup','theme','sound','vibration'].forEach(k=>{ if(data[k]!=null) DB.save(k,data[k]); });
-    setTheme(DB.load('theme','dark')); toast('Data &aring;terst&auml;lld',true); go('home');
-  }catch(e){ toast('Kunde inte l&auml;sa filen'); } };
+    setTheme(DB.load('theme','dark')); toast('Data återställd',true); go('home');
+  }catch(e){ toast('Kunde inte läsa filen'); } };
   r.readAsText(file);
 }
 function quitGame(){
@@ -791,13 +791,13 @@ function recordsCard(pbs){
   </div>`;
 }
 function resetTrainingPB(id){
-  if(!confirm('Nollst&auml;lla rekordet f&ouml;r detta l&auml;ge?')) return;
+  if(!confirm('Nollställa rekordet för detta läge?')) return;
   const hist=DB.load('training',[]).filter(h=>h.id!==id);
-  DB.save('training',hist); toast('Rekord nollst&auml;llt',true); render();
+  DB.save('training',hist); toast('Rekord nollställt',true); render();
 }
 function resetAllTrainingPB(){
-  if(!confirm('Nollst&auml;lla ALLA tr&auml;ningsrekord?')) return;
-  DB.save('training',[]); toast('Alla rekord nollst&auml;llda',true); render();
+  if(!confirm('Nollställa ALLA träningsrekord?')) return;
+  DB.save('training',[]); toast('Alla rekord nollställda',true); render();
 }
 
 /* ============================== statistik-hjälp & export ============================== */
@@ -864,7 +864,7 @@ function exportPDF(){
     <table><thead><tr><th>Spelare</th><th>Matcher</th><th>Vinster</th><th>3-pilssnitt</th><th>180</th><th>140+</th><th>Checkout%</th><th>Hogsta CO</th><th>Basta leg</th><th>Vunna legs</th></tr></thead>
     <tbody>${rows}</tbody></table></body></html>`;
   const w=window.open('','_blank');
-  if(!w){ toast('Till&aring;t popup f&ouml;r PDF'); return; }
+  if(!w){ toast('Tillåt popup för PDF'); return; }
   w.document.write(html); w.document.close(); w.focus();
   setTimeout(()=>{ try{w.print();}catch(e){} }, 400);
 }
