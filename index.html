@@ -96,6 +96,16 @@
   .recrow{display:flex;justify-content:space-between;align-items:center;padding:9px 0;border-bottom:1px solid var(--border)}
   .recrow:last-of-type{border-bottom:none}
   .recreset{width:30px;height:30px;border-radius:8px;border:1px solid var(--border);background:var(--surface2);color:var(--danger);font-size:16px;cursor:pointer}
+  .dist{display:flex;flex-direction:column;gap:8px}
+  .distrow{display:flex;align-items:center;gap:10px;font-size:13px}
+  .distlbl{width:64px;color:var(--txt2)}
+  .distbar{flex:1;height:14px;background:var(--surface2);border-radius:7px;overflow:hidden}
+  .distbar span{display:block;height:100%;background:var(--accent);border-radius:7px}
+  .distval{width:30px;text-align:right;font-weight:600}
+  .ptable{width:100%;border-collapse:collapse;font-size:14px}
+  .ptable th{text-align:left;color:var(--txt2);font-weight:500;font-size:12px;padding:6px 4px;border-bottom:1px solid var(--border)}
+  .ptable td{padding:8px 4px;border-bottom:1px solid var(--border)}
+  .ptable tr:last-child td{border-bottom:none}
   .toggle{padding:7px 18px;border-radius:999px;border:1px solid var(--border);background:var(--surface2);color:var(--txt2);font-weight:600;cursor:pointer;font-size:13px}
   .toggle.on{background:var(--accent);color:var(--accent-ink);border:none}
   .celebrate{position:fixed;inset:0;display:flex;align-items:center;justify-content:center;z-index:80;font-size:96px;font-weight:800;color:var(--accent);pointer-events:none;animation:pop 1.1s ease-out forwards}
@@ -168,7 +178,8 @@ function simulate(match){
   const cfg=match.config, n=cfg.players.length;
   const rem=cfg.players.map(()=>cfg.startScore);
   const legDarts=cfg.players.map(()=>0);
-  const stats=cfg.players.map(()=>({score:0,darts:0,c180:0,c140:0,highCO:0,bestLeg:null,legsWon:0,setsWon:0,doubleAtt:0,doubleHit:0}));
+  const stats=cfg.players.map(()=>({score:0,darts:0,c180:0,c140:0,c100:0,highCO:0,bestLeg:null,worstLeg:null,legsWon:0,setsWon:0,doubleAtt:0,doubleHit:0,bands:[0,0,0,0,0,0],first9:0,first9d:0,wonLegSum:0,checkouts:[]}));
+  const legTurns=cfg.players.map(()=>0);
   let setWins=Array(n).fill(0), legWins=Array(n).fill(0);
   let legCount=0, cur=0, setNumber=1, finished=false, winner=null;
 
@@ -178,19 +189,23 @@ function simulate(match){
     if(t.throws){ let rb=rem[p];
       for(const td of t.throws){ const onD=(rb<=40&&rb%2===0)||rb===50;
         if(onD){ st.doubleAtt++; if(td.db && rb-td.v===0) st.doubleHit++; } rb-=td.v; if(rb<0) break; } }
-    if(t.bust){ const dd=t.darts||3; st.darts+=dd; legDarts[p]+=dd; cur=(cur+1)%n; continue; }
+    if(t.bust){ const dd=t.darts||3; st.darts+=dd; legDarts[p]+=dd; st.bands[5]++; if(legTurns[p]<3) st.first9d+=dd; legTurns[p]++; cur=(cur+1)%n; continue; }
     const newRem=rem[p]-t.score;
     st.score+=t.score; st.darts+=t.darts; legDarts[p]+=t.darts;
-    if(t.score===180)st.c180++; if(t.score>=140)st.c140++;
+    if(t.score===180)st.c180++; if(t.score>=140)st.c140++; if(t.score>=100)st.c100++;
+    if(t.score===180) st.bands[0]++; else if(t.score>=140) st.bands[1]++; else if(t.score>=100) st.bands[2]++; else if(t.score>=60) st.bands[3]++; else st.bands[4]++;
+    if(legTurns[p]<3){ st.first9+=t.score; st.first9d+=t.darts; } legTurns[p]++;
     if(newRem===0){
       st.highCO=Math.max(st.highCO,t.score);
       st.legsWon++; legWins[p]++;
       st.bestLeg = st.bestLeg===null? legDarts[p] : Math.min(st.bestLeg,legDarts[p]);
+      st.worstLeg = st.worstLeg===null? legDarts[p] : Math.max(st.worstLeg,legDarts[p]);
+      st.wonLegSum += legDarts[p]; st.checkouts.push(t.score);
       if(legWins[p]>=cfg.legs){ setWins[p]++; st.setsWon=setWins[p]; legWins=Array(n).fill(0); setNumber++;
         if(setWins[p]>=cfg.sets){ finished=true; winner=p; }
       }
       // reset leg
-      for(let i=0;i<n;i++){ rem[i]=cfg.startScore; legDarts[i]=0; }
+      for(let i=0;i<n;i++){ rem[i]=cfg.startScore; legDarts[i]=0; legTurns[i]=0; }
       legCount++; cur=legCount%n;
       continue;
     }
@@ -203,7 +218,7 @@ function simulate(match){
 }
 
 /* ============================== app state & router ============================== */
-let state = { view:'home', match:null, buffer:'', setup:null, pendingCheckout:null, training:null, darts:[], mult:'S' };
+let state = { view:'home', match:null, buffer:'', setup:null, pendingCheckout:null, training:null, darts:[], mult:'S', statsPlayer:null };
 
 function go(v){ state.view=v; render(); }
 function toast(msg,ok=false){
@@ -430,6 +445,7 @@ function viewStats(){
       </div>
       <div class="label" style="margin-top:14px">Snittutveckling per match</div>
       ${sparkSVG(playerAvgSeries(hist,name))}
+      <button class="btn secondary" style="margin-top:12px" onclick="openPlayerStats('${jsq(name)}')">Mer statistik &#8594;</button>
     </div>`).join('')}
     <div class="label" style="margin-top:8px">Historik</div>
     ${hist.slice().reverse().map(histRow).join('')}
@@ -579,6 +595,7 @@ function render(){
     case 'training': html=viewTraining(); break;
     case 'trainingActive': html=viewTrainingActive(); break;
     case 'settings': html=viewSettings(); break;
+    case 'playerStats': html=viewPlayerStats(); break;
     default: html=viewHome();
   }
   app.innerHTML=html+navbar();
@@ -838,6 +855,93 @@ function playerAvgSeries(hist,name){
   hist.forEach(m=>{ const i=m.config.players.indexOf(name); if(i<0)return;
     const st=simulate(m).stats[i]; if(st.darts) vals.push(st.score/st.darts*3); });
   return vals;
+}
+function jsq(s){ return String(s).replace(/\\/g,'\\\\').replace(/'/g,"\\'").replace(/"/g,'&quot;'); }
+function openPlayerStats(name){ state.statsPlayer=name; go('playerStats'); }
+function playerDetail(hist,name){
+  const D={matches:0,wins:0,legs:0,sets:0,darts:0,points:0,c180:0,c140:0,c100:0,
+    bands:[0,0,0,0,0,0],first9:0,first9d:0,bestLeg:null,worstLeg:null,wonLegSum:0,
+    checkouts:[],highCO:0,doubleAtt:0,doubleHit:0,avgSeries:[],byStart:{}};
+  hist.forEach(m=>{ const i=m.config.players.indexOf(name); if(i<0)return;
+    const sim=simulate(m), st=sim.stats[i];
+    D.matches++; if(sim.winner===i) D.wins++;
+    D.legs+=st.legsWon; D.sets+=st.setsWon; D.darts+=st.darts; D.points+=st.score;
+    D.c180+=st.c180; D.c140+=st.c140; D.c100+=st.c100;
+    for(let b=0;b<6;b++) D.bands[b]+=st.bands[b];
+    D.first9+=st.first9; D.first9d+=st.first9d;
+    D.doubleAtt+=st.doubleAtt; D.doubleHit+=st.doubleHit;
+    D.highCO=Math.max(D.highCO,st.highCO);
+    if(st.bestLeg!=null) D.bestLeg=D.bestLeg==null?st.bestLeg:Math.min(D.bestLeg,st.bestLeg);
+    if(st.worstLeg!=null) D.worstLeg=D.worstLeg==null?st.worstLeg:Math.max(D.worstLeg,st.worstLeg);
+    D.wonLegSum+=st.wonLegSum;
+    st.checkouts.forEach(c=>D.checkouts.push(c));
+    if(st.darts) D.avgSeries.push(st.score/st.darts*3);
+    const bs=D.byStart[m.config.startScore]||(D.byStart[m.config.startScore]={score:0,darts:0,legs:0,matches:0});
+    bs.score+=st.score; bs.darts+=st.darts; bs.legs+=st.legsWon; bs.matches++;
+  });
+  return D;
+}
+function distBars(bands){
+  const labels=['180','140-179','100-139','60-99','1-59','Bust'];
+  const max=Math.max(1,...bands);
+  return `<div class="dist">${bands.map((v,i)=>`
+    <div class="distrow"><span class="distlbl">${labels[i]}</span>
+      <span class="distbar"><span style="width:${Math.round(v/max*100)}%"></span></span>
+      <span class="distval">${v}</span></div>`).join('')}</div>`;
+}
+function startTable(byStart){
+  const ids=Object.keys(byStart).sort((a,b)=>a-b);
+  if(!ids.length) return '';
+  return `<div class="card"><div class="label">Per speltyp</div>
+    <table class="ptable"><thead><tr><th>Start</th><th>Matcher</th><th>3-pilssnitt</th><th>Legs</th></tr></thead><tbody>
+    ${ids.map(id=>{const b=byStart[id];return `<tr><td>${id}</td><td>${b.matches}</td><td>${fmt1(b.darts?b.score/b.darts*3:0)}</td><td>${b.legs}</td></tr>`;}).join('')}
+    </tbody></table></div>`;
+}
+function viewPlayerStats(){
+  const name=state.statsPlayer||''; const hist=DB.load('matches',[]);
+  const D=playerDetail(hist,name);
+  if(!D.matches) return topbar(esc(name))+`<div class="view">
+    <button class="btn ghost" style="margin-bottom:12px" onclick="go('stats')">&#8592; Tillbaka</button>
+    <div class="empty">Ingen data f&ouml;r ${esc(name)}.</div></div>`;
+  const avg3=D.darts?D.points/D.darts*3:0;
+  const first9=D.first9d?D.first9/D.first9d*3:0;
+  const coPct=D.doubleAtt?Math.round(D.doubleHit/D.doubleAtt*100):null;
+  const dartsLeg=D.legs?D.wonLegSum/D.legs:0;
+  const topCO=[...D.checkouts].sort((a,b)=>b-a).slice(0,8);
+  return topbar(esc(name))+`<div class="view">
+    <button class="btn ghost" style="margin-bottom:12px" onclick="go('stats')">&#8592; Tillbaka till statistik</button>
+    <div class="card" style="text-align:center;border-color:var(--accent)">
+      <div style="font-size:22px;font-weight:700">${esc(name)}</div>
+      <div class="muted">${D.matches} matcher &middot; ${D.wins} vinster (${Math.round(D.wins/D.matches*100)}%)</div>
+    </div>
+    <div class="card"><div class="label">Prestation</div>
+      <div class="statgrid">
+        <div class="stat"><div class="v">${fmt1(avg3)}</div><div class="k">3-pilssnitt</div></div>
+        <div class="stat"><div class="v">${fmt1(first9)}</div><div class="k">F&ouml;rsta 9-snitt</div></div>
+        <div class="stat"><div class="v">${coPct!=null?coPct+'%':'—'}</div><div class="k">Checkout %</div></div>
+        <div class="stat"><div class="v">${dartsLeg?fmt1(dartsLeg):'—'}</div><div class="k">Snitt pilar/leg</div></div>
+        <div class="stat"><div class="v">${D.bestLeg||'—'}</div><div class="k">B&auml;sta leg</div></div>
+        <div class="stat"><div class="v">${D.worstLeg||'—'}</div><div class="k">S&auml;msta leg</div></div>
+      </div>
+    </div>
+    <div class="card"><div class="label">R&auml;knare</div>
+      <div class="statgrid">
+        <div class="stat"><div class="v">${D.c180}</div><div class="k">180:or</div></div>
+        <div class="stat"><div class="v">${D.c140}</div><div class="k">140+</div></div>
+        <div class="stat"><div class="v">${D.c100}</div><div class="k">Tons (100+)</div></div>
+        <div class="stat"><div class="v">${D.highCO||'—'}</div><div class="k">H&ouml;gsta checkout</div></div>
+        <div class="stat"><div class="v">${D.legs}</div><div class="k">Vunna legs</div></div>
+        <div class="stat"><div class="v">${D.sets}</div><div class="k">Vunna sets</div></div>
+        <div class="stat"><div class="v">${D.darts}</div><div class="k">Totalt pilar</div></div>
+        <div class="stat"><div class="v">${D.points.toLocaleString('sv-SE')}</div><div class="k">Totalt po&auml;ng</div></div>
+      </div>
+    </div>
+    <div class="card"><div class="label">Po&auml;ngf&ouml;rdelning (per tur)</div>${distBars(D.bands)}</div>
+    ${topCO.length?`<div class="card"><div class="label">H&ouml;gsta checkouts</div>
+      <div class="chips" style="flex-wrap:wrap">${topCO.map(c=>`<span class="badge" style="font-size:15px;padding:6px 12px">${c}</span>`).join('')}</div></div>`:''}
+    <div class="card"><div class="label">Snittutveckling per match</div>${sparkSVG(D.avgSeries)}</div>
+    ${startTable(D.byStart)}
+  </div>`;
 }
 function sparkSVG(vals){
   if(vals.length<2) return `<div class="muted" style="font-size:12px">F&ouml;r lite data f&ouml;r graf &auml;n.</div>`;
