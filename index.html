@@ -222,6 +222,7 @@ function topbar(sub){
 function toggleTheme(){
   const cur=document.documentElement.getAttribute('data-theme');
   setTheme(cur==='dark'?'light':'dark');
+  render();
 }
 
 function viewHome(){
@@ -255,16 +256,32 @@ function viewHome(){
     <div class="label" style="margin-top:8px">Senaste matcher</div>
     ${recent.length? recent.map(histRow).join('') :
       '<div class="muted" style="padding:8px 2px">Inga matcher &auml;n &mdash; spela din f&ouml;rsta!</div>'}
-    <div class="card" style="margin-top:12px">
-      <div class="label">Inst&auml;llningar</div>
+  </div>`;
+}
+
+function viewSettings(){
+  const theme=document.documentElement.getAttribute('data-theme')==='dark'?'Mörkt':'Ljust';
+  return topbar('Inställningar')+`<div class="view">
+    <div class="card">
+      <div class="label">Utseende</div>
+      <div class="recrow"><span>Tema</span>
+        <button class="toggle on" onclick="toggleTheme()">${theme}</button></div>
+    </div>
+    <div class="card">
+      <div class="label">Under spel</div>
       ${toggleRow('Ljud (caller)','sound',false)}
       ${toggleRow('Vibration','vibration',true)}
-      <div class="row" style="gap:8px;margin-top:12px">
-        <button class="btn secondary" style="flex:1" onclick="exportBackup()">S&auml;kerhetskopiera</button>
-        <button class="btn secondary" style="flex:1" onclick="importBackupPrompt()">&Aring;terst&auml;ll</button>
+    </div>
+    <div class="card">
+      <div class="label">Data</div>
+      <div class="muted" style="text-transform:none;letter-spacing:0;margin-bottom:12px">Spara all data till en fil, eller läs in den på en annan enhet.</div>
+      <div class="row" style="gap:8px">
+        <button class="btn secondary" style="flex:1" onclick="exportBackup()">Säkerhetskopiera</button>
+        <button class="btn secondary" style="flex:1" onclick="importBackupPrompt()">Återställ</button>
       </div>
       <input type="file" id="restoreFile" accept="application/json" style="display:none" onchange="if(this.files[0])importBackup(this.files[0])">
     </div>
+    <div class="muted" style="text-align:center;margin-top:8px">Oche &middot; offline dart scorer</div>
   </div>`;
 }
 
@@ -544,7 +561,7 @@ function ttCheckout(tr){
 /* ============================== nav ============================== */
 function navbar(){
   if(['game','summary','trainingActive'].includes(state.view)) return '';
-  const items=[['home','&#127968;','Hem'],['training','&#127919;','Tr&auml;na'],['stats','&#128202;','Statistik']];
+  const items=[['home','&#127968;','Hem'],['training','&#127919;','Tr&auml;na'],['stats','&#128202;','Statistik'],['settings','&#9881;','Mer']];
   return `<div class="nav">${items.map(([v,ic,l])=>
     `<button class="${state.view===v?'on':''}" onclick="go('${v}')"><span class="ico">${ic}</span>${l}</button>`).join('')}</div>`;
 }
@@ -561,6 +578,7 @@ function render(){
     case 'stats': html=viewStats(); break;
     case 'training': html=viewTraining(); break;
     case 'trainingActive': html=viewTrainingActive(); break;
+    case 'settings': html=viewSettings(); break;
     default: html=viewHome();
   }
   app.innerHTML=html+navbar();
