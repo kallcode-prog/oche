@@ -1,0 +1,740 @@
+<!DOCTYPE html>
+<html lang="sv" data-theme="dark">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+<title>Oche — Dart scorer</title>
+<style>
+  :root{
+    --bg:#0E1116; --surface:#171B22; --surface2:#212732; --accent:#34D399;
+    --accent-ink:#06231A; --sec:#38BDF8; --warn:#FBBF24; --danger:#F87171;
+    --txt:#F4F6F8; --txt2:#9AA4B2; --border:#2A313C; --radius:14px;
+  }
+  [data-theme="light"]{
+    --bg:#F7F8FA; --surface:#FFFFFF; --surface2:#EDF0F4; --accent:#0E9F6E;
+    --accent-ink:#FFFFFF; --sec:#0284C7; --warn:#B45309; --danger:#DC2626;
+    --txt:#0E1116; --txt2:#5A6472; --border:#E2E6EC;
+  }
+  *{box-sizing:border-box;-webkit-tap-highlight-color:transparent}
+  html,body{margin:0;height:100%}
+  body{
+    background:var(--bg); color:var(--txt);
+    font-family:'Inter',-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;
+    font-variant-numeric:tabular-nums; overscroll-behavior:none;
+  }
+  #app{max-width:560px;margin:0 auto;min-height:100%;display:flex;flex-direction:column;padding-bottom:76px}
+  .view{flex:1;padding:16px}
+  h1,h2,h3{margin:0;font-weight:600}
+  .topbar{display:flex;align-items:center;justify-content:space-between;padding:14px 16px 4px}
+  .topbar .logo{font-size:24px;font-weight:700;letter-spacing:-.02em}
+  .topbar .logo b{color:var(--accent)}
+  .topbar .sub{font-size:12px;color:var(--txt2)}
+  .iconbtn{background:var(--surface2);border:1px solid var(--border);color:var(--txt);
+    width:40px;height:40px;border-radius:10px;font-size:18px;cursor:pointer;display:flex;align-items:center;justify-content:center}
+  .card{background:var(--surface);border:1px solid var(--border);border-radius:var(--radius);padding:16px;margin-bottom:12px}
+  .muted{color:var(--txt2);font-size:13px}
+  .label{color:var(--txt2);font-size:12px;text-transform:uppercase;letter-spacing:.05em;margin-bottom:8px}
+  button{font-family:inherit}
+  .btn{display:block;width:100%;padding:16px;border-radius:var(--radius);border:none;cursor:pointer;
+    font-size:17px;font-weight:600;background:var(--accent);color:var(--accent-ink)}
+  .btn.secondary{background:var(--surface2);color:var(--txt);border:1px solid var(--border)}
+  .btn.ghost{background:transparent;color:var(--txt2);border:1px solid var(--border)}
+  .btn.danger{background:transparent;color:var(--danger);border:1px solid var(--border)}
+  .chips{display:flex;gap:8px;flex-wrap:wrap}
+  .chip{flex:1;min-width:64px;text-align:center;padding:12px 8px;border-radius:10px;border:1px solid var(--border);
+    background:var(--surface);color:var(--txt2);cursor:pointer;font-size:15px;font-weight:500}
+  .chip.on{border-color:var(--accent);color:var(--accent);background:rgba(52,211,153,.12)}
+  .row{display:flex;gap:8px;align-items:center}
+  .stepper{display:flex;align-items:center;gap:12px}
+  .stepper button{width:40px;height:40px;border-radius:10px;border:1px solid var(--border);background:var(--surface2);color:var(--txt);font-size:20px;cursor:pointer}
+  .stepper .val{font-size:20px;font-weight:600;min-width:28px;text-align:center}
+  input.txt{width:100%;padding:13px;border-radius:10px;border:1px solid var(--border);background:var(--surface);color:var(--txt);font-size:16px;font-family:inherit}
+  .playerrow{display:flex;gap:8px;align-items:center;margin-bottom:8px}
+  .playerrow input{flex:1}
+  .playerrow .rm{width:44px;height:46px;border-radius:10px;border:1px solid var(--border);background:var(--surface2);color:var(--danger);font-size:18px;cursor:pointer}
+  /* nav */
+  .nav{position:fixed;bottom:0;left:0;right:0;background:var(--surface);border-top:1px solid var(--border);
+    display:flex;max-width:560px;margin:0 auto;z-index:20}
+  .nav button{flex:1;background:none;border:none;color:var(--txt2);padding:10px 0 14px;cursor:pointer;font-size:11px;display:flex;flex-direction:column;align-items:center;gap:3px}
+  .nav button .ico{font-size:20px;line-height:1}
+  .nav button.on{color:var(--accent)}
+  /* game */
+  .gametop{display:flex;align-items:center;justify-content:space-between;padding:12px 16px}
+  .pill{font-size:12px;color:var(--txt2);background:var(--surface2);padding:6px 12px;border-radius:999px}
+  .scorehero{text-align:center;padding:4px 0 6px}
+  .scorehero .who{font-size:15px;color:var(--accent);font-weight:600}
+  .scorehero .rem{font-size:72px;font-weight:700;line-height:1;letter-spacing:-.03em}
+  .scorehero .rem.buffer{color:var(--sec)}
+  .scorehero .co{margin-top:6px;min-height:26px;display:flex;gap:6px;justify-content:center;flex-wrap:wrap}
+  .scorehero .co .x{background:rgba(52,211,153,.12);color:var(--accent);font-weight:600;font-size:13px;padding:4px 10px;border-radius:8px;border:1px solid var(--accent)}
+  .players{display:flex;gap:8px;overflow-x:auto;padding:0 16px 8px}
+  .pcard{flex:0 0 auto;min-width:96px;background:var(--surface);border:1px solid var(--border);border-radius:12px;padding:10px 12px}
+  .pcard.active{border-color:var(--accent);background:rgba(52,211,153,.08)}
+  .pcard .nm{font-size:13px;font-weight:600;white-space:nowrap}
+  .pcard .pr{font-size:26px;font-weight:700;line-height:1.1}
+  .pcard .meta{font-size:11px;color:var(--txt2);margin-top:2px}
+  .quick{display:flex;gap:6px;padding:6px 16px;overflow-x:auto}
+  .quick button{flex:0 0 auto;background:var(--surface2);border:1px solid var(--border);color:var(--txt);border-radius:10px;padding:9px 12px;font-size:14px;font-weight:600;cursor:pointer}
+  .numpad{display:grid;grid-template-columns:repeat(3,1fr);gap:8px;padding:8px 16px 16px}
+  .numpad button{padding:18px 0;font-size:24px;font-weight:600;border-radius:14px;border:1px solid var(--border);background:var(--surface2);color:var(--txt);cursor:pointer}
+  .numpad button:active{transform:scale(.97)}
+  .numpad .enter{background:var(--accent);color:var(--accent-ink);border:none}
+  .numpad .back{color:var(--warn)}
+  /* stats */
+  .statgrid{display:grid;grid-template-columns:1fr 1fr;gap:10px}
+  .stat{background:var(--surface2);border-radius:12px;padding:12px}
+  .stat .v{font-size:24px;font-weight:700}
+  .stat .k{font-size:12px;color:var(--txt2)}
+  .histitem{display:flex;justify-content:space-between;align-items:center;padding:12px;border:1px solid var(--border);border-radius:12px;margin-bottom:8px;background:var(--surface)}
+  .histitem .meta{font-size:12px;color:var(--txt2)}
+  .badge{background:rgba(52,211,153,.14);color:var(--accent);font-size:12px;font-weight:600;padding:3px 9px;border-radius:999px}
+  .empty{text-align:center;color:var(--txt2);padding:40px 20px}
+  .empty .big{font-size:40px;opacity:.4;margin-bottom:8px}
+  /* overlay */
+  .overlay{position:fixed;inset:0;background:rgba(0,0,0,.6);display:flex;align-items:center;justify-content:center;z-index:50;padding:20px}
+  .sheet{background:var(--surface);border:1px solid var(--border);border-radius:18px;padding:20px;max-width:360px;width:100%;text-align:center}
+  .sheet h3{margin-bottom:14px}
+  .toast{position:fixed;left:50%;top:18px;transform:translateX(-50%);background:var(--danger);color:#fff;
+    padding:10px 18px;border-radius:999px;font-weight:600;z-index:60;box-shadow:0 4px 16px rgba(0,0,0,.3)}
+  .toast.ok{background:var(--accent);color:var(--accent-ink)}
+  .grid2{display:grid;grid-template-columns:1fr 1fr;gap:10px}
+  .menuitem{display:flex;align-items:center;gap:12px;padding:16px;border:1px solid var(--border);border-radius:14px;background:var(--surface);cursor:pointer;margin-bottom:10px;font-size:16px;font-weight:500}
+  .menuitem .ico{font-size:22px;width:30px;text-align:center}
+  .atc-target{font-size:64px;font-weight:700;text-align:center;color:var(--accent)}
+</style>
+</head>
+<body>
+<div id="app"></div>
+
+<script>
+"use strict";
+/* ============================ Oche — offline dart scorer ============================ */
+const $ = (s,r=document)=>r.querySelector(s);
+const fmt1 = n => (Math.round(n*10)/10).toFixed(1);
+const uid = () => Date.now().toString(36)+Math.random().toString(36).slice(2,7);
+const OMOJLIGA_DO = new Set([159,162,163,165,166,168,169]);
+const OMOJLIGA_SCORE = new Set([163,166,169,172,173,175,176,178,179]);
+
+/* ---- storage ---- */
+const DB = {
+  load(k,def){ try{return JSON.parse(localStorage.getItem('oche.'+k)) ?? def;}catch{return def;} },
+  save(k,v){ localStorage.setItem('oche.'+k, JSON.stringify(v)); },
+};
+
+/* ---- checkout calculator ---- */
+const SCORING = [['T20',60],['T19',57],['T18',54],['T17',51],['Bull',50],['T16',48],
+  ['T15',45],['T14',42],['S20',20],['S19',19],['S18',18],['S17',17],['S16',16],['S5',5],['S1',1]];
+function slutkast(kvar, regel){
+  if(regel==='double'){ if(kvar===50)return'Bull'; if(kvar<=40&&kvar%2===0)return'D'+(kvar/2); return null; }
+  if(regel==='master'){ if(kvar===50)return'Bull'; if(kvar<=40&&kvar%2===0)return'D'+(kvar/2);
+    if(kvar<=60&&kvar%3===0)return'T'+(kvar/3); return null; }
+  if(kvar===25||kvar===50)return'Bull'; if(kvar<=20)return'S'+kvar;
+  if(kvar<=40&&kvar%2===0)return'D'+(kvar/2); if(kvar<=60&&kvar%3===0)return'T'+(kvar/3); return null;
+}
+function sokMedPilar(kvar,regel,pilar){
+  if(pilar===1){ const s=slutkast(kvar,regel); return s?[s]:null; }
+  for(const [et,po] of SCORING){ if(po>=kvar)continue; const rest=sokMedPilar(kvar-po,regel,pilar-1); if(rest)return[et,...rest]; }
+  return null;
+}
+function checkout(kvar,regel,pilarKvar=3){
+  if(kvar<2||kvar>170)return[];
+  if(regel==='double'&&OMOJLIGA_DO.has(kvar))return[];
+  for(let p=1;p<=pilarKvar;p++){ const v=sokMedPilar(kvar,regel,p); if(v)return v; }
+  return [];
+}
+
+/* ---- match simulation (recompute everything from the turn log) ---- */
+function simulate(match){
+  const cfg=match.config, n=cfg.players.length;
+  const rem=cfg.players.map(()=>cfg.startScore);
+  const legDarts=cfg.players.map(()=>0);
+  const stats=cfg.players.map(()=>({score:0,darts:0,c180:0,c140:0,highCO:0,bestLeg:null,legsWon:0,setsWon:0}));
+  let setWins=Array(n).fill(0), legWins=Array(n).fill(0);
+  let legCount=0, cur=0, setNumber=1, finished=false, winner=null;
+
+  for(const t of match.turns){
+    if(finished) break;
+    const p=cur, st=stats[p];
+    if(t.bust){ st.darts+=3; legDarts[p]+=3; cur=(cur+1)%n; continue; }
+    const newRem=rem[p]-t.score;
+    st.score+=t.score; st.darts+=t.darts; legDarts[p]+=t.darts;
+    if(t.score===180)st.c180++; if(t.score>=140)st.c140++;
+    if(newRem===0){
+      st.highCO=Math.max(st.highCO,t.score);
+      st.legsWon++; legWins[p]++;
+      st.bestLeg = st.bestLeg===null? legDarts[p] : Math.min(st.bestLeg,legDarts[p]);
+      if(legWins[p]>=cfg.legs){ setWins[p]++; st.setsWon=setWins[p]; legWins=Array(n).fill(0); setNumber++;
+        if(setWins[p]>=cfg.sets){ finished=true; winner=p; }
+      }
+      // reset leg
+      for(let i=0;i<n;i++){ rem[i]=cfg.startScore; legDarts[i]=0; }
+      legCount++; cur=legCount%n;
+      continue;
+    }
+    rem[p]=newRem; cur=(cur+1)%n;
+  }
+  stats.forEach((st,i)=>{ st.setsWon=setWins[i]; st.avg = st.darts? st.score/st.darts*3 : 0; });
+  const legsInSet = legWins.reduce((a,b)=>a+b,0);
+  return {rem,cur,setWins,legWins,stats,finished,winner,setNumber,
+          legNumber:legsInSet+1, n};
+}
+
+/* ============================== app state & router ============================== */
+let state = { view:'home', match:null, buffer:'', setup:null, pendingCheckout:null, training:null };
+
+function go(v){ state.view=v; render(); }
+function toast(msg,ok=false){
+  const t=document.createElement('div'); t.className='toast'+(ok?' ok':''); t.textContent=msg;
+  document.body.appendChild(t); setTimeout(()=>t.remove(),1400);
+}
+function setTheme(t){ document.documentElement.setAttribute('data-theme',t); DB.save('theme',t); }
+
+/* ============================== views ============================== */
+function topbar(sub){
+  return `<div class="topbar">
+    <div><div class="logo">O<b>che</b></div><div class="sub">${sub||'Dart scorer &amp; tr&auml;ning'}</div></div>
+    <button class="iconbtn" onclick="toggleTheme()" title="Byt tema">&#9681;</button>
+  </div>`;
+}
+function toggleTheme(){
+  const cur=document.documentElement.getAttribute('data-theme');
+  setTheme(cur==='dark'?'light':'dark');
+}
+
+function viewHome(){
+  const hist=DB.load('matches',[]);
+  const recent=hist.slice(-3).reverse();
+  const last=DB.load('lastSetup', {startScore:501,outRule:'double',sets:1,legs:3});
+  return topbar()+`<div class="view">
+    <div class="card" style="border-color:var(--accent)">
+      <div class="label">Snabbstart</div>
+      <div style="font-size:20px;font-weight:700;margin-bottom:4px">${last.startScore} &middot; ${ruleName(last.outRule)} out</div>
+      <div class="muted" style="margin-bottom:14px">Forts&auml;tt med senaste inst&auml;llningar</div>
+      <button class="btn" onclick="quickStart()">Spela nu</button>
+      <button class="btn secondary" style="margin-top:8px" onclick="go('setup')">Ny match&hellip;</button>
+    </div>
+    <div class="grid2">
+      <div class="menuitem" onclick="go('training')"><span class="ico">&#127919;</span>Tr&auml;na</div>
+      <div class="menuitem" onclick="go('stats')"><span class="ico">&#128202;</span>Statistik</div>
+    </div>
+    <div class="label" style="margin-top:8px">Senaste matcher</div>
+    ${recent.length? recent.map(histRow).join('') :
+      '<div class="muted" style="padding:8px 2px">Inga matcher &auml;n &mdash; spela din f&ouml;rsta!</div>'}
+  </div>`;
+}
+
+function ruleName(r){ return r==='double'?'Double':r==='master'?'Master':'Single'; }
+
+function viewSetup(){
+  if(!state.setup){
+    const last=DB.load('lastSetup',{startScore:501,outRule:'double',sets:1,legs:3});
+    const roster=DB.load('roster',['Spelare 1','Spelare 2']);
+    state.setup={...last, custom:'', players:[...roster]};
+  }
+  const s=state.setup;
+  const starts=[101,301,501,701];
+  return topbar('Ny match')+`<div class="view">
+    <div class="card">
+      <div class="label">Startv&auml;rde</div>
+      <div class="chips">
+        ${starts.map(v=>`<div class="chip ${s.startScore===v&&!s.custom?'on':''}" onclick="setStart(${v})">${v}</div>`).join('')}
+      </div>
+      <div class="row" style="margin-top:10px">
+        <input class="txt" type="number" inputmode="numeric" placeholder="Eget startv&auml;rde" value="${s.custom||''}" oninput="setCustom(this.value)">
+      </div>
+    </div>
+    <div class="card">
+      <div class="label">Ut-regel</div>
+      <div class="chips">
+        ${['single','double','master'].map(r=>`<div class="chip ${s.outRule===r?'on':''}" onclick="setRule('${r}')">${ruleName(r)}</div>`).join('')}
+      </div>
+    </div>
+    <div class="card">
+      <div class="row" style="justify-content:space-between">
+        <div class="label" style="margin:0">Legs (vinst per set)</div>
+        <div class="stepper"><button onclick="bump('legs',-1)">&minus;</button><span class="val">${s.legs}</span><button onclick="bump('legs',1)">+</button></div>
+      </div>
+      <div class="row" style="justify-content:space-between;margin-top:14px">
+        <div class="label" style="margin:0">Sets (vinst)</div>
+        <div class="stepper"><button onclick="bump('sets',-1)">&minus;</button><span class="val">${s.sets}</span><button onclick="bump('sets',1)">+</button></div>
+      </div>
+    </div>
+    <div class="card">
+      <div class="label">Spelare (${s.players.length}/8)</div>
+      ${s.players.map((p,i)=>`<div class="playerrow">
+        <input class="txt" value="${esc(p)}" oninput="setPlayer(${i},this.value)" placeholder="Namn">
+        ${s.players.length>1?`<button class="rm" onclick="rmPlayer(${i})">&times;</button>`:''}
+      </div>`).join('')}
+      ${s.players.length<8?`<button class="btn ghost" onclick="addPlayer()">+ L&auml;gg till spelare</button>`:''}
+    </div>
+    <button class="btn" onclick="startMatch()">Starta match</button>
+  </div>`;
+}
+function esc(s){ return String(s).replace(/"/g,'&quot;').replace(/</g,'&lt;'); }
+
+function viewGame(){
+  const m=state.match, sim=simulate(m);
+  if(sim.finished){ saveMatch(m,sim); state.view='summary'; return viewSummary(sim); }
+  const cur=sim.cur, rem=sim.rem[cur];
+  const buf=state.buffer;
+  const shown = buf!==''? buf : rem;
+  const co = buf===''? checkout(rem, m.config.outRule) : [];
+  const name = m.config.players[cur];
+  return `<div class="gametop">
+      <button class="iconbtn" onclick="quitGame()" title="Avsluta">&times;</button>
+      <div class="pill">Set ${sim.setNumber} &middot; Leg ${sim.legNumber}</div>
+      <button class="iconbtn" onclick="undo()" title="&Aring;ngra">&#8634;</button>
+    </div>
+    <div class="players">
+      ${m.config.players.map((p,i)=>`<div class="pcard ${i===cur?'active':''}">
+        <div class="nm">${esc(p)}</div>
+        <div class="pr">${sim.rem[i]}</div>
+        <div class="meta">snitt ${fmt1(sim.stats[i].avg)} &middot; ${sim.legWins[i]}L</div>
+      </div>`).join('')}
+    </div>
+    <div class="scorehero">
+      <div class="who">${esc(name)}</div>
+      <div class="rem ${buf!==''?'buffer':''}">${shown}</div>
+      <div class="co">${co.map(x=>`<span class="x">${x}</span>`).join('')}</div>
+    </div>
+    <div class="quick">
+      ${[26,41,45,60,81,85,100,140,180].map(v=>`<button onclick="quickScore(${v})">${v}</button>`).join('')}
+      <button onclick="quickScore(0)">Miss</button>
+    </div>
+    <div class="numpad">
+      ${[1,2,3,4,5,6,7,8,9].map(d=>`<button onclick="press('${d}')">${d}</button>`).join('')}
+      <button class="back" onclick="press('back')">&#9003;</button>
+      <button onclick="press('0')">0</button>
+      <button class="enter" onclick="submitScore()">&#10003;</button>
+    </div>`;
+}
+
+function viewSummary(sim){
+  const m=state.match;
+  if(!sim) sim=simulate(m);
+  const w=sim.winner!=null? m.config.players[sim.winner] : '—';
+  return topbar('Matchen klar')+`<div class="view">
+    <div class="card" style="text-align:center;border-color:var(--accent)">
+      <div class="muted">Vinnare</div>
+      <div style="font-size:34px;font-weight:700;margin:6px 0">&#127942; ${esc(w)}</div>
+      <div class="badge">${sim.setWins.map((sw,i)=>esc(m.config.players[i])+' '+sw).join(' &middot; ')}</div>
+    </div>
+    ${m.config.players.map((p,i)=>{const st=sim.stats[i];return`<div class="card">
+      <div style="font-weight:600;margin-bottom:10px">${esc(p)}</div>
+      <div class="statgrid">
+        <div class="stat"><div class="v">${fmt1(st.avg)}</div><div class="k">3-pilssnitt</div></div>
+        <div class="stat"><div class="v">${st.legsWon}</div><div class="k">Vunna legs</div></div>
+        <div class="stat"><div class="v">${st.c180}</div><div class="k">180:or</div></div>
+        <div class="stat"><div class="v">${st.highCO||'—'}</div><div class="k">H&ouml;gsta checkout</div></div>
+        <div class="stat"><div class="v">${st.bestLeg||'—'}</div><div class="k">B&auml;sta leg (pilar)</div></div>
+        <div class="stat"><div class="v">${st.c140}</div><div class="k">140+</div></div>
+      </div></div>`;}).join('')}
+    <button class="btn" onclick="rematch()">Revansch (samma inst&auml;llningar)</button>
+    <button class="btn secondary" style="margin-top:8px" onclick="state.match=null;go('home')">Till start</button>
+  </div>`;
+}
+
+function viewStats(){
+  const hist=DB.load('matches',[]);
+  if(!hist.length) return topbar('Statistik')+`<div class="view"><div class="empty"><div class="big">&#128202;</div>Ingen statistik &auml;n.<br>Spela en match f&ouml;rst!</div></div>`;
+  const agg={};
+  for(const m of hist){ const sim=simulate(m);
+    m.config.players.forEach((p,i)=>{ const st=sim.stats[i];
+      const a=agg[p]||(agg[p]={score:0,darts:0,c180:0,c140:0,highCO:0,bestLeg:null,legsWon:0,setsWon:0,matches:0,wins:0});
+      a.score+=st.score; a.darts+=st.darts; a.c180+=st.c180; a.c140+=st.c140;
+      a.highCO=Math.max(a.highCO,st.highCO); a.legsWon+=st.legsWon; a.setsWon+=st.setsWon; a.matches++;
+      if(st.bestLeg!=null) a.bestLeg = a.bestLeg==null?st.bestLeg:Math.min(a.bestLeg,st.bestLeg);
+      if(sim.winner===i) a.wins++;
+    });
+  }
+  return topbar('Statistik')+`<div class="view">
+    <div class="row" style="gap:8px;margin-bottom:12px">
+      <button class="btn secondary" style="flex:1" onclick="exportCSV()">&#11015; CSV</button>
+      <button class="btn secondary" style="flex:1" onclick="exportPDF()">&#11015; PDF</button>
+    </div>
+    ${Object.entries(agg).sort((a,b)=>b[1].matches-a[1].matches).map(([name,a])=>`<div class="card">
+      <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:10px">
+        <div style="font-weight:600;font-size:17px">${esc(name)}</div>
+        <div class="badge">${a.wins}/${a.matches} vinster</div>
+      </div>
+      <div class="statgrid">
+        <div class="stat"><div class="v">${fmt1(a.darts?a.score/a.darts*3:0)}</div><div class="k">3-pilssnitt</div></div>
+        <div class="stat"><div class="v">${a.legsWon}</div><div class="k">Vunna legs</div></div>
+        <div class="stat"><div class="v">${a.c180}</div><div class="k">180:or</div></div>
+        <div class="stat"><div class="v">${a.c140}</div><div class="k">140+</div></div>
+        <div class="stat"><div class="v">${a.highCO||'—'}</div><div class="k">H&ouml;gsta checkout</div></div>
+        <div class="stat"><div class="v">${a.bestLeg||'—'}</div><div class="k">B&auml;sta leg</div></div>
+      </div>
+      <div class="label" style="margin-top:14px">Snittutveckling per match</div>
+      ${sparkSVG(playerAvgSeries(hist,name))}
+    </div>`).join('')}
+    <div class="label" style="margin-top:8px">Historik</div>
+    ${hist.slice().reverse().map(histRow).join('')}
+    <button class="btn danger" style="margin-top:8px" onclick="clearHistory()">Rensa all historik</button>
+  </div>`;
+}
+
+function histRow(m){
+  const sim=simulate(m); const w=sim.winner!=null?m.config.players[sim.winner]:'avbruten';
+  const d=new Date(m.date); const ds=d.toLocaleDateString('sv-SE')+' '+d.toLocaleTimeString('sv-SE',{hour:'2-digit',minute:'2-digit'});
+  return `<div class="histitem">
+    <div><div style="font-weight:600">${esc(m.config.players.join(', '))}</div>
+    <div class="meta">${m.config.startScore} &middot; ${ruleName(m.config.outRule)} out &middot; ${ds}</div></div>
+    <div class="badge">&#127942; ${esc(w)}</div></div>`;
+}
+
+function viewTraining(){
+  const pbs=trainingPBs();
+  const modes=[
+    ['atc','&#128347;','Around the Clock','Tr&auml;ffa 1&ndash;20 i ordning','%'],
+    ['cricket','&#127919;','Cricket Training','15&ndash;20 + Bull','%'],
+    ['scoring','&#128200;','Scoring Challenge','Max po&auml;ng p&aring; 10 rundor','p'],
+    ['doubles','&#9211;','Doubles Practice','Tr&auml;na p&aring; dubblar','%'],
+    ['bulls','&#9678;','Bulls Practice','Tr&auml;na p&aring; bullseye','%'],
+  ];
+  return topbar('Tr&auml;ning')+`<div class="view">
+    ${modes.map(([id,ic,t,d,u])=>`<div class="menuitem" onclick="startTraining('${id}')">
+      <span class="ico">${ic}</span>
+      <div style="flex:1"><div>${t}</div><div class="muted" style="text-transform:none;letter-spacing:0">${d}</div></div>
+      ${pbs[id]!=null?`<span class="badge">PB ${pbs[id]}${u}</span>`:''}
+    </div>`).join('')}
+    <div class="card">
+      <div class="label">Checkout Training</div>
+      <div class="muted" style="margin-bottom:10px;text-transform:none;letter-spacing:0">Slumpade utg&aring;ngar &middot; v&auml;lj sv&aring;righetsgrad${pbs.checkout!=null?' &middot; PB '+pbs.checkout+'%':''}</div>
+      <div class="chips">
+        <div class="chip" onclick="startCheckout('latt')">L&auml;tt</div>
+        <div class="chip" onclick="startCheckout('medel')">Medel</div>
+        <div class="chip" onclick="startCheckout('svar')">Sv&aring;r</div>
+      </div>
+    </div>
+  </div>`;
+}
+
+function thead(tr,prog){
+  return `<div class="gametop">
+      <button class="iconbtn" onclick="state.training=null;state.buffer='';go('training')" title="Avsluta">&times;</button>
+      <div class="pill">${tr.title} &middot; ${prog}</div>
+      <div style="width:40px"></div>
+    </div>`;
+}
+function ttHero(label,t,sub){
+  return `<div class="scorehero" style="padding-top:24px"><div class="who">${label}</div>
+    <div class="atc-target">${t}</div>${sub?`<div class="muted">${sub}</div>`:''}</div>`;
+}
+function ttResult(tr,line1,big){
+  return topbar(tr.title)+`<div class="view">
+    <div class="card" style="text-align:center;border-color:var(--accent)">
+      <div class="muted">Klart!</div>
+      <div style="font-size:48px;font-weight:700;margin:6px 0">${big}</div>
+      <div class="muted">${line1}</div>
+    </div>
+    <button class="btn" onclick="repeatTraining()">G&ouml;r igen</button>
+    <button class="btn secondary" style="margin-top:8px" onclick="state.training=null;go('training')">Tillbaka</button>
+  </div>`;
+}
+function numpadHTML(enterFn){
+  return `<div class="quick">
+      ${[26,41,45,60,81,85,100,140,180].map(v=>`<button onclick="state.buffer='${v}';${enterFn}()">${v}</button>`).join('')}
+      <button onclick="state.buffer='0';${enterFn}()">Miss</button>
+    </div>
+    <div class="numpad">
+      ${[1,2,3,4,5,6,7,8,9].map(d=>`<button onclick="press('${d}')">${d}</button>`).join('')}
+      <button class="back" onclick="press('back')">&#9003;</button>
+      <button onclick="press('0')">0</button>
+      <button class="enter" onclick="${enterFn}()">&#10003;</button>
+    </div>`;
+}
+
+function viewTrainingActive(){
+  const tr=state.training;
+  switch(tr.kind){
+    case 'cricket': return ttCricket(tr);
+    case 'scoring': return ttScoring(tr);
+    case 'checkout': return ttCheckout(tr);
+    default: return ttSeq(tr);
+  }
+}
+function ttSeq(tr){
+  const acc=tr.throws?Math.round(tr.hits/tr.throws*100):0;
+  if(tr.index>=tr.seq.length){ saveTrainingResult(tr.id,tr.title,acc); return ttResult(tr, tr.hits+' tr&auml;ffar p&aring; '+tr.throws+' kast', acc+'%'); }
+  return thead(tr,(tr.index+1)+'/'+tr.seq.length+' &middot; '+acc+'%') + ttHero('Sikta p&aring;', tr.seq[tr.index]) +
+    `<div style="padding:24px 16px">
+      <button class="btn" onclick="trainHit(true)">&#10003; Tr&auml;ff</button>
+      <button class="btn secondary" style="margin-top:10px" onclick="trainHit(false)">&times; Miss</button>
+    </div>`;
+}
+function ttCricket(tr){
+  const max=tr.targets.length*3;
+  if(tr.index>=tr.targets.length){ const pct=Math.round(tr.marks/max*100); saveTrainingResult('cricket',tr.title,pct); return ttResult(tr, tr.marks+' tr&auml;ffar av '+max, pct+'%'); }
+  return thead(tr,(tr.index+1)+'/'+tr.targets.length) + ttHero('Tr&auml;ffa', tr.targets[tr.index], '3 pilar') +
+    `<div style="padding:8px 16px 24px">
+      <div class="muted" style="text-align:center;margin-bottom:12px">Hur m&aring;nga av 3 tr&auml;ffade?</div>
+      <div class="chips">${[0,1,2,3].map(n=>`<div class="chip" onclick="cricketMark(${n})">${n}</div>`).join('')}</div>
+    </div>`;
+}
+function ttScoring(tr){
+  const total=tr.scores.reduce((a,b)=>a+b,0);
+  if(tr.index>=tr.rounds){ const avg=tr.rounds?total/(tr.rounds*3)*3:0; saveTrainingResult('scoring',tr.title,total); return ttResult(tr, fmt1(avg)+' snitt p&aring; '+tr.rounds+' rundor', total+' p'); }
+  const buf=state.buffer;
+  return thead(tr,'Runda '+(tr.index+1)+'/'+tr.rounds) +
+    `<div class="scorehero"><div class="who">Totalt ${total}</div>
+      <div class="rem ${buf!==''?'buffer':''}">${buf!==''?buf:0}</div></div>` +
+    numpadHTML('scoringSubmit');
+}
+function ttCheckout(tr){
+  const pct=tr.attempts?Math.round(tr.success/tr.attempts*100):0;
+  if(tr.index>=tr.items.length){ saveTrainingResult('checkout',tr.title,pct); return ttResult(tr, tr.success+' av '+tr.attempts+' lyckade', pct+'%'); }
+  const n=tr.items[tr.index]; const route=checkout(n,'double');
+  return thead(tr,(tr.index+1)+'/'+tr.items.length+' &middot; '+pct+'%') +
+    `<div class="scorehero"><div class="who">Checka</div><div class="rem">${n}</div>
+      <div class="co">${route.map(x=>`<span class="x">${x}</span>`).join('')}</div></div>
+    <div style="padding:16px">
+      <button class="btn" onclick="checkoutMark(true)">&#10003; Lyckades</button>
+      <button class="btn secondary" style="margin-top:10px" onclick="checkoutMark(false)">&times; Missade</button>
+    </div>`;
+}
+
+/* ============================== nav ============================== */
+function navbar(){
+  if(['game','summary','trainingActive'].includes(state.view)) return '';
+  const items=[['home','&#127968;','Hem'],['training','&#127919;','Tr&auml;na'],['stats','&#128202;','Statistik']];
+  return `<div class="nav">${items.map(([v,ic,l])=>
+    `<button class="${state.view===v?'on':''}" onclick="go('${v}')"><span class="ico">${ic}</span>${l}</button>`).join('')}</div>`;
+}
+
+/* ============================== render ============================== */
+function render(){
+  const app=$('#app');
+  let html='';
+  switch(state.view){
+    case 'home': html=viewHome(); break;
+    case 'setup': html=viewSetup(); break;
+    case 'game': html=viewGame(); break;
+    case 'summary': html=viewSummary(); break;
+    case 'stats': html=viewStats(); break;
+    case 'training': html=viewTraining(); break;
+    case 'trainingActive': html=viewTrainingActive(); break;
+    default: html=viewHome();
+  }
+  app.innerHTML=html+navbar();
+  if(state.pendingCheckout) renderCheckoutSheet();
+}
+
+/* ============================== setup actions ============================== */
+function setStart(v){ state.setup.startScore=v; state.setup.custom=''; render(); }
+function setCustom(v){ state.setup.custom=v; if(v){state.setup.startScore=parseInt(v)||0;} }
+function setRule(r){ state.setup.outRule=r; render(); }
+function bump(k,d){ state.setup[k]=Math.max(1,Math.min(9,state.setup[k]+d)); render(); }
+function setPlayer(i,v){ state.setup.players[i]=v; }
+function addPlayer(){ if(state.setup.players.length<8){ state.setup.players.push('Spelare '+(state.setup.players.length+1)); render(); } }
+function rmPlayer(i){ state.setup.players.splice(i,1); render(); }
+
+function startMatch(){
+  const s=state.setup;
+  const players=s.players.map(p=>p.trim()).filter(Boolean);
+  if(!players.length){ toast('L&auml;gg till minst en spelare'); return; }
+  const startScore = s.custom? (parseInt(s.custom)||501) : s.startScore;
+  if(startScore<2){ toast('Ogiltigt startv&auml;rde'); return; }
+  const config={startScore,outRule:s.outRule,sets:s.sets,legs:s.legs,players};
+  DB.save('lastSetup',{startScore,outRule:s.outRule,sets:s.sets,legs:s.legs});
+  DB.save('roster',players);
+  state.match={config,turns:[],date:Date.now(),id:uid()};
+  state.buffer=''; state.setup=null;
+  go('game');
+}
+function quickStart(){
+  const last=DB.load('lastSetup',{startScore:501,outRule:'double',sets:1,legs:3});
+  const roster=DB.load('roster',['Spelare 1','Spelare 2']);
+  state.match={config:{...last,players:[...roster]},turns:[],date:Date.now(),id:uid()};
+  state.buffer=''; go('game');
+}
+function rematch(){
+  const old=state.match;
+  state.match={config:old.config,turns:[],date:Date.now(),id:uid()};
+  state.buffer=''; go('game');
+}
+
+/* ============================== game actions ============================== */
+function press(d){
+  if(d==='back'){ state.buffer=state.buffer.slice(0,-1); render(); return; }
+  if(state.buffer.length>=3) return;
+  const nv=state.buffer+d;
+  if(parseInt(nv)>180) return;
+  state.buffer=nv; render();
+}
+function quickScore(v){ state.buffer=String(v); submitScore(); }
+
+function submitScore(){
+  const m=state.match, sim=simulate(m), cur=sim.cur, rem=sim.rem[cur];
+  if(state.buffer===''){ return; }
+  const score=parseInt(state.buffer);
+  if(isNaN(score)||score>180){ toast('Max 180'); state.buffer=''; render(); return; }
+  if(OMOJLIGA_SCORE.has(score)){ toast(score+' &auml;r om&ouml;jligt'); state.buffer=''; render(); return; }
+  const newRem=rem-score;
+  const bust = newRem<0 || (newRem===1 && m.config.outRule==='double');
+  if(bust){ m.turns.push({score,darts:3,bust:true}); state.buffer=''; toast('Bust!'); render(); return; }
+  if(newRem===0){
+    // checkout — ask darts used (for best-leg & checkout %)
+    state.pendingCheckout={score}; render(); return;
+  }
+  m.turns.push({score,darts:3}); state.buffer=''; render();
+}
+function renderCheckoutSheet(){
+  const el=document.createElement('div'); el.className='overlay';
+  el.innerHTML=`<div class="sheet"><h3>Utg&aring;ng! Hur m&aring;nga pilar?</h3>
+    <div class="row" style="gap:10px">
+      ${[1,2,3].map(n=>`<button class="btn" onclick="confirmCheckout(${n})">${n}</button>`).join('')}
+    </div></div>`;
+  document.body.appendChild(el); el._oche=true;
+}
+function confirmCheckout(darts){
+  const m=state.match, pc=state.pendingCheckout;
+  m.turns.push({score:pc.score,darts,checkout:true});
+  state.pendingCheckout=null; state.buffer='';
+  document.querySelectorAll('.overlay').forEach(o=>o.remove());
+  toast('Leg vunnen!',true); render();
+}
+function undo(){
+  const m=state.match;
+  if(!m.turns.length){ toast('Inget att &aring;ngra'); return; }
+  m.turns.pop(); state.buffer=''; render();
+}
+function quitGame(){
+  if(confirm('Avsluta matchen? Den sparas inte.')){ state.match=null; go('home'); }
+}
+function saveMatch(m,sim){
+  if(m.saved) return; m.saved=true;
+  const hist=DB.load('matches',[]); hist.push({...m}); DB.save('matches',hist);
+}
+function clearHistory(){
+  if(confirm('Radera ALL matchhistorik och statistik?')){ DB.save('matches',[]); render(); toast('Historik rensad',true); }
+}
+
+/* ============================== training ============================== */
+function startTraining(id){
+  let tr;
+  if(id==='atc') tr={id,kind:'seq',title:'Around the Clock',seq:Array.from({length:20},(_,i)=>String(i+1)),index:0,hits:0,throws:0};
+  else if(id==='bulls') tr={id,kind:'seq',title:'Bulls Practice',seq:Array.from({length:10},()=>'Bull'),index:0,hits:0,throws:0};
+  else if(id==='doubles') tr={id,kind:'seq',title:'Doubles Practice',seq:[20,16,18,17,19,15,11,14,13,12].map(n=>'D'+n),index:0,hits:0,throws:0};
+  else if(id==='cricket') tr={id,kind:'cricket',title:'Cricket Training',targets:['20','19','18','17','16','15','Bull'],index:0,marks:0};
+  else if(id==='scoring') tr={id,kind:'scoring',title:'Scoring Challenge',rounds:10,scores:[],index:0};
+  else return;
+  state.training=tr; state.buffer=''; go('trainingActive');
+}
+function startCheckout(diff){
+  const namn={latt:'L&auml;tt',medel:'Medel',svar:'Sv&aring;r'}[diff]||'Medel';
+  state.training={id:'checkout',kind:'checkout',difficulty:diff,title:'Checkout &middot; '+namn,
+    items:genCheckouts(diff,9),index:0,success:0,attempts:0};
+  state.buffer=''; go('trainingActive');
+}
+function genCheckouts(diff,count){
+  const range = diff==='latt'?[2,40] : diff==='svar'?[100,170] : [41,99];
+  const out=[]; let guard=0;
+  while(out.length<count && guard++<3000){
+    const n=Math.floor(Math.random()*(range[1]-range[0]+1))+range[0];
+    if(checkout(n,'double').length) out.push(n);
+  }
+  return out;
+}
+function repeatTraining(){ const tr=state.training; if(tr.kind==='checkout') startCheckout(tr.difficulty); else startTraining(tr.id); }
+function trainHit(hit){ const tr=state.training; tr.throws++; if(hit)tr.hits++; tr.index++; render(); }
+function cricketMark(n){ const tr=state.training; tr.marks+=n; tr.index++; render(); }
+function checkoutMark(ok){ const tr=state.training; tr.attempts++; if(ok)tr.success++; tr.index++; render(); }
+function scoringSubmit(){ const tr=state.training; if(state.buffer==='')return; let s=parseInt(state.buffer);
+  if(isNaN(s))s=0; if(s>180){toast('Max 180');state.buffer='';render();return;}
+  tr.scores.push(s); tr.index++; state.buffer=''; render(); }
+function saveTrainingResult(modeId,title,score){
+  const tr=state.training; if(!tr||tr.saved)return; tr.saved=true;
+  const hist=DB.load('training',[]);
+  hist.push({id:modeId,title,score,date:Date.now()});
+  DB.save('training',hist);
+}
+function trainingPBs(){
+  const hist=DB.load('training',[]); const pb={};
+  hist.forEach(h=>{ pb[h.id] = pb[h.id]==null? h.score : Math.max(pb[h.id],h.score); });
+  return pb;
+}
+
+/* ============================== statistik-hjälp & export ============================== */
+function aggStats(hist){
+  const agg={};
+  for(const m of hist){ const sim=simulate(m);
+    m.config.players.forEach((p,i)=>{ const st=sim.stats[i];
+      const a=agg[p]||(agg[p]={score:0,darts:0,c180:0,c140:0,highCO:0,bestLeg:null,legsWon:0,setsWon:0,matches:0,wins:0});
+      a.score+=st.score; a.darts+=st.darts; a.c180+=st.c180; a.c140+=st.c140;
+      a.highCO=Math.max(a.highCO,st.highCO); a.legsWon+=st.legsWon; a.setsWon+=st.setsWon; a.matches++;
+      if(st.bestLeg!=null) a.bestLeg = a.bestLeg==null?st.bestLeg:Math.min(a.bestLeg,st.bestLeg);
+      if(sim.winner===i) a.wins++;
+    });
+  }
+  return agg;
+}
+function playerAvgSeries(hist,name){
+  const vals=[];
+  hist.forEach(m=>{ const i=m.config.players.indexOf(name); if(i<0)return;
+    const st=simulate(m).stats[i]; if(st.darts) vals.push(st.score/st.darts*3); });
+  return vals;
+}
+function sparkSVG(vals){
+  if(vals.length<2) return `<div class="muted" style="font-size:12px">F&ouml;r lite data f&ouml;r graf &auml;n.</div>`;
+  const w=300,h=72,pad=8; const max=Math.max(...vals),min=Math.min(...vals),rng=(max-min)||1;
+  const pts=vals.map((v,i)=>[pad+i*(w-2*pad)/(vals.length-1), h-pad-(v-min)/rng*(h-2*pad)]);
+  const path=pts.map((p,i)=>(i?'L':'M')+p[0].toFixed(1)+' '+p[1].toFixed(1)).join(' ');
+  const dots=pts.map(p=>`<circle cx="${p[0].toFixed(1)}" cy="${p[1].toFixed(1)}" r="2.5" fill="var(--accent)"/>`).join('');
+  return `<svg viewBox="0 0 ${w} ${h}" width="100%" height="${h}" preserveAspectRatio="none" style="margin-top:6px">
+    <path d="${path}" fill="none" stroke="var(--accent)" stroke-width="2"/>${dots}
+    <text x="${pad}" y="12" fill="var(--txt2)" font-size="10">${fmt1(max)}</text>
+    <text x="${pad}" y="${h-2}" fill="var(--txt2)" font-size="10">${fmt1(min)}</text></svg>`;
+}
+function download(name, blob){
+  const url=URL.createObjectURL(blob); const a=document.createElement('a');
+  a.href=url; a.download=name; document.body.appendChild(a); a.click(); a.remove();
+  setTimeout(()=>URL.revokeObjectURL(url),2000);
+}
+function exportCSV(){
+  const hist=DB.load('matches',[]); if(!hist.length){toast('Ingen data');return;}
+  const rows=[['Datum','Spelare','Start','Ut-regel','3-pilssnitt','180','140+','Hogsta checkout','Basta leg','Vunna legs','Vunna sets','Vinnare']];
+  hist.forEach(m=>{ const sim=simulate(m);
+    m.config.players.forEach((p,i)=>{ const st=sim.stats[i];
+      rows.push([new Date(m.date).toLocaleString('sv-SE'),p,m.config.startScore,ruleName(m.config.outRule),
+        fmt1(st.avg),st.c180,st.c140,st.highCO,st.bestLeg||'',st.legsWon,st.setsWon, sim.winner===i?'JA':'']);
+    });
+  });
+  const csv=rows.map(r=>r.map(c=>`"${String(c).replace(/"/g,'""')}"`).join(';')).join('\r\n');
+  download('oche-statistik.csv', new Blob(['﻿'+csv],{type:'text/csv;charset=utf-8'}));
+  toast('CSV exporterad',true);
+}
+function exportPDF(){
+  const hist=DB.load('matches',[]); if(!hist.length){toast('Ingen data');return;}
+  const agg=aggStats(hist);
+  const rows=Object.entries(agg).sort((a,b)=>b[1].matches-a[1].matches).map(([n,a])=>
+    `<tr><td>${n}</td><td>${a.matches}</td><td>${a.wins}</td><td>${fmt1(a.darts?a.score/a.darts*3:0)}</td><td>${a.c180}</td><td>${a.c140}</td><td>${a.highCO||'-'}</td><td>${a.bestLeg||'-'}</td><td>${a.legsWon}</td></tr>`).join('');
+  const html=`<!DOCTYPE html><html lang="sv"><head><meta charset="utf-8"><title>Oche statistik</title>
+    <style>body{font-family:Arial,Helvetica,sans-serif;color:#111;padding:28px}h1{color:#0E9F6E;margin:0}
+    p{color:#555}table{border-collapse:collapse;width:100%;margin-top:14px}
+    th,td{border:1px solid #ccc;padding:8px 10px;text-align:left;font-size:13px}th{background:#f2f2f2}</style></head>
+    <body><h1>Oche &mdash; Statistikrapport</h1>
+    <p>Genererad ${new Date().toLocaleString('sv-SE')} &middot; ${hist.length} matcher</p>
+    <table><thead><tr><th>Spelare</th><th>Matcher</th><th>Vinster</th><th>3-pilssnitt</th><th>180</th><th>140+</th><th>Hogsta CO</th><th>Basta leg</th><th>Vunna legs</th></tr></thead>
+    <tbody>${rows}</tbody></table></body></html>`;
+  const w=window.open('','_blank');
+  if(!w){ toast('Till&aring;t popup f&ouml;r PDF'); return; }
+  w.document.write(html); w.document.close(); w.focus();
+  setTimeout(()=>{ try{w.print();}catch(e){} }, 400);
+}
+
+/* ============================== keyboard ============================== */
+document.addEventListener('keydown',e=>{
+  const scoring = state.view==='trainingActive' && state.training && state.training.kind==='scoring';
+  if((state.view!=='game' && !scoring) || state.pendingCheckout) return;
+  if(e.key>='0'&&e.key<='9') press(e.key);
+  else if(e.key==='Enter'){ scoring? scoringSubmit() : submitScore(); }
+  else if(e.key==='Backspace'){ e.preventDefault(); press('back'); }
+});
+
+/* ============================== boot ============================== */
+setTheme(DB.load('theme','dark'));
+render();
+</script>
+</body>
+</html>
