@@ -10,14 +10,14 @@
     --surface:#141A21; --surface2:#1C232D; --surface3:#28323E; --accent:#34D399;
     --accent2:#22B98A; --accent-ink:#04231A; --sec:#56C7FB; --warn:#FBBF24; --danger:#F87171;
     --txt:#F4F7FA; --txt2:#97A1B0; --txt3:#5C6675; --border:rgba(255,255,255,.08); --border2:rgba(255,255,255,.15);
-    --radius:16px; --shadow:0 2px 10px rgba(0,0,0,.35);
+    --radius:16px; --shadow:0 2px 10px rgba(0,0,0,.35); --nav-bg:rgba(20,26,33,.82);
   }
   [data-theme="light"]{
     --bg:#F4F6F9; --glow:rgba(14,159,110,.06);
     --surface:#FFFFFF; --surface2:#EEF1F5; --surface3:#E2E8EF; --accent:#0E9F6E;
     --accent2:#0B8A5F; --accent-ink:#FFFFFF; --sec:#0284C7; --warn:#B45309; --danger:#DC2626;
     --txt:#0E1116; --txt2:#5A6472; --txt3:#9098A4; --border:rgba(15,23,32,.10); --border2:rgba(15,23,32,.16);
-    --shadow:0 2px 10px rgba(15,23,32,.08);
+    --shadow:0 2px 10px rgba(15,23,32,.08); --nav-bg:rgba(255,255,255,.82);
   }
   *{box-sizing:border-box;-webkit-tap-highlight-color:transparent}
   html,body{margin:0;height:100%}
@@ -168,6 +168,37 @@
   .atc-target{font-size:72px;font-weight:800;text-align:center;color:var(--accent);letter-spacing:-.03em}
   @supports ((-webkit-background-clip:text) or (background-clip:text)){
     .topbar .logo b,.atc-target{background:linear-gradient(135deg,var(--accent),var(--sec));-webkit-background-clip:text;background-clip:text;color:transparent}
+  }
+  /* — finputs: animationer, hover, fokus, glas-nav — */
+  @keyframes viewIn{from{opacity:0;transform:translateY(8px)}to{opacity:1;transform:none}}
+  @keyframes toastIn{from{opacity:0;transform:translate(-50%,-10px)}to{opacity:1;transform:translate(-50%,0)}}
+  @keyframes fadeIn{from{opacity:0}to{opacity:1}}
+  @keyframes sheetIn{from{opacity:0;transform:scale(.94)}to{opacity:1;transform:none}}
+  .view{animation:viewIn .2s ease both}
+  .toast{animation:toastIn .24s cubic-bezier(.2,.8,.2,1) both}
+  .overlay{animation:fadeIn .16s ease both}
+  .sheet{animation:sheetIn .22s cubic-bezier(.2,.8,.2,1) both}
+  :focus-visible{outline:none}
+  button:focus-visible,input:focus-visible{box-shadow:0 0 0 3px rgba(52,211,153,.4)}
+  @supports ((backdrop-filter:blur(8px)) or (-webkit-backdrop-filter:blur(8px))){
+    .nav{background:var(--nav-bg);-webkit-backdrop-filter:saturate(1.4) blur(14px);backdrop-filter:saturate(1.4) blur(14px)}
+  }
+  @media (hover:hover) and (pointer:fine){
+    .menuitem{transition:transform .15s ease,border-color .15s ease,box-shadow .15s ease}
+    .menuitem:hover{transform:translateY(-2px);border-color:var(--border2);box-shadow:0 10px 26px -12px rgba(0,0,0,.55)}
+    .btn:hover{filter:brightness(1.05)}
+    .btn.secondary:hover,.btn.ghost:hover{filter:none;border-color:var(--accent);color:var(--accent)}
+    .btn.danger:hover{filter:none;border-color:var(--danger);background:rgba(248,113,113,.08)}
+    .chip:hover{border-color:var(--border2)}
+    .iconbtn:hover{background:var(--surface3);border-color:var(--border2)}
+    .nav button:hover{color:var(--txt)}
+    .dartgrid button:hover,.numpad button:hover,.multbtn:hover,.quick button:hover,.dartspecial button:hover{background:var(--surface3);border-color:var(--border2)}
+    .recreset:hover{border-color:var(--danger)}
+    .toggle:hover{border-color:var(--border2)}
+    .stepper button:hover{border-color:var(--border2)}
+  }
+  @media (prefers-reduced-motion:reduce){
+    *,*::before,*::after{animation-duration:.001ms!important;animation-iteration-count:1!important;transition-duration:.001ms!important}
   }
 </style>
 </head>
