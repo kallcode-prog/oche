@@ -759,6 +759,29 @@ function ttBob27(tr){
 /* Tavlans geometri i mm + kalibreringspunkter (ytterkant double): 20, 6, 3, 11 */
 const CALIB_SRC=[[0,170],[170,0],[0,-170],[-170,0]];
 const CALIB_PROMPTS=['20 (toppen)','6 (höger)','3 (botten)','11 (vänster)'];
+const DART_NUMBERS=[20,1,18,4,13,6,10,15,2,17,3,19,7,16,8,11,14,9,12,5];
+/* tavlans koordinat (mm) -> fält */
+function boardToField(x,y){
+  const r=Math.hypot(x,y);
+  if(r>170) return {label:'Miss',val:0,seg:0,mult:'S',isDouble:false,isTreble:false};
+  if(r<=6.35) return {label:'Bull',val:50,seg:25,mult:'D',isDouble:true,isTreble:false};
+  if(r<=15.9) return {label:'Outer',val:25,seg:25,mult:'S',isDouble:false,isTreble:false};
+  const th=Math.atan2(y,x)*180/Math.PI;
+  const k=(((Math.round((90-th)/18))%20)+20)%20;
+  const seg=DART_NUMBERS[k];
+  if(r>162) return {label:'D'+seg,val:seg*2,seg,mult:'D',isDouble:true,isTreble:false};
+  if(r>99&&r<=107) return {label:'T'+seg,val:seg*3,seg,mult:'T',isDouble:false,isTreble:true};
+  return {label:'S'+seg,val:seg,seg,mult:'S',isDouble:false,isTreble:false};
+}
+function pxToBoard(points,W,H,px,py){
+  const dst=points.slice(0,4).map(n=>[n[0]*W,n[1]*H]);
+  return applyH(solveH(dst,CALIB_SRC), px,py);
+}
+function fieldText(f){
+  if(f.label==='Miss') return 'Miss';
+  if(f.seg===25) return f.isDouble?'Bull = 50':'Outer = 25';
+  return ({S:'Single',D:'Dubbel',T:'Trippel'}[f.mult])+' '+f.seg+' = '+f.val;
+}
 function viewCamera(){
   return `<div class="camwrap">
     <video id="camvid" autoplay playsinline muted></video>
@@ -812,13 +835,14 @@ function camStatus(t){ const e=document.getElementById('camstatus'); if(e) e.tex
 function camButtons(list){ const e=document.getElementById('cambtns'); if(!e) return;
   e.innerHTML=list.map(([lbl,fn])=>`<button class="btn ${fn==='saveCalib'?'':'secondary'}" onclick="${fn}()">${lbl}</button>`).join(''); }
 function undoTap(){ camState.points.pop(); camState.redraw&&camState.redraw(); }
-function recalibrate(){ camState.points=[]; DB.save('camCalib',null); camState.redraw&&camState.redraw(); }
+function recalibrate(){ camState.points=[]; camState.lastTap=null; DB.save('camCalib',null); camState.redraw&&camState.redraw(); }
 function saveCalib(){ DB.save('camCalib', camState.points.slice(0,4)); toast('Kalibrering sparad',true); camState.redraw&&camState.redraw(); }
 function initCamera(){
   const vid=document.getElementById('camvid'), canvas=document.getElementById('camcanvas');
   if(!vid||!canvas) return;
   const saved=DB.load('camCalib',null);
   camState.points = saved? saved.slice() : [];
+  camState.lastTap=null;
   function px(n){ return [n[0]*canvas.width, n[1]*canvas.height]; }
   function redraw(){
     canvas.width=canvas.clientWidth; canvas.height=canvas.clientHeight;
@@ -826,8 +850,13 @@ function initCamera(){
     if(camState.points.length>=4){
       const H=solveH(CALIB_SRC, camState.points.slice(0,4).map(px));
       drawBoard(ctx,H);
-      if(DB.load('camCalib',null)){ camStatus('Kalibrerad ✓ — ligger rutnätet rätt på tavlan?'); camButtons([['Kalibrera om','recalibrate'],['Stäng','closeCamera']]); }
-      else { camStatus('Ser rutnätet rätt ut på tavlan?'); camButtons([['Spara kalibrering','saveCalib'],['Gör om','recalibrate']]); }
+      if(camState.lastTap){ const {x,y}=camState.lastTap;
+        ctx.fillStyle='#fff'; ctx.strokeStyle='#34D399'; ctx.lineWidth=2.5;
+        ctx.beginPath(); ctx.arc(x,y,6,0,Math.PI*2); ctx.fill(); ctx.stroke(); }
+      if(DB.load('camCalib',null)){
+        camStatus(camState.lastTap? '🎯 '+fieldText(camState.lastTap.f) : 'Tappa på en pil för att testa fältet');
+        camButtons([['Kalibrera om','recalibrate'],['Stäng','closeCamera']]);
+      } else { camStatus('Ser rutnätet rätt ut på tavlan?'); camButtons([['Spara kalibrering','saveCalib'],['Gör om','recalibrate']]); }
     } else {
       const ctx2=canvas.getContext('2d');
       camState.points.forEach(n=>{ const [u,v]=px(n); ctx2.fillStyle='#34D399'; ctx2.beginPath(); ctx2.arc(u,v,8,0,Math.PI*2); ctx2.fill(); ctx2.strokeStyle='#fff'; ctx2.lineWidth=2; ctx2.stroke(); });
@@ -837,9 +866,13 @@ function initCamera(){
   }
   camState.redraw=redraw;
   canvas.onclick=e=>{
-    if(camState.points.length>=4) return;
     const r=canvas.getBoundingClientRect();
-    camState.points.push([(e.clientX-r.left)/r.width,(e.clientY-r.top)/r.height]); redraw();
+    const x=e.clientX-r.left, y=e.clientY-r.top;
+    if(camState.points.length<4){ camState.points.push([x/r.width,y/r.height]); camState.lastTap=null; redraw(); return; }
+    const cx=x*canvas.width/r.width, cy=y*canvas.height/r.height;
+    const [bx,by]=pxToBoard(camState.points, canvas.width, canvas.height, cx, cy);
+    camState.lastTap={x:cx,y:cy,f:boardToField(bx,by)};
+    redraw();
   };
   window.addEventListener('resize', redraw);
   if(!navigator.mediaDevices||!navigator.mediaDevices.getUserMedia){ camStatus('Kameran stöds inte i denna webbläsare.'); redraw(); return; }
