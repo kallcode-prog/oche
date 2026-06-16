@@ -328,7 +328,7 @@ function simulate(match){
 
 /* ============================== app state & router ============================== */
 let state = { view:'home', match:null, buffer:'', setup:null, pendingCheckout:null, training:null, darts:[], mult:'S', statsPlayer:null };
-let camState = { stream:null, points:[], redraw:null, scoring:false, turnMarks:[], turnEnded:false, lastTap:null };
+let camState = { stream:null, points:[], redraw:null, scoring:false, turnMarks:[], turnEnded:false, lastTap:null, auto:false, suggestion:null, det:null, proc:null, refData:null, detTimer:null, vid:null, canvas:null };
 
 function go(v){ state.view=v; render(); }
 function toast(msg,ok=false){
@@ -795,7 +795,7 @@ function viewCamera(){
 }
 function openCamera(){ camState.scoring=false; camState.lastTap=null; go('camera'); }
 function openCameraScoring(){ camState.scoring=true; camState.turnMarks=[]; camState.turnEnded=false; camState.lastTap=null; go('camera'); }
-function stopCam(){ if(camState.stream){ camState.stream.getTracks().forEach(t=>t.stop()); camState.stream=null; } if(camState.redraw) window.removeEventListener('resize', camState.redraw); }
+function stopCam(){ stopDetect(); camState.auto=false; if(camState.stream){ camState.stream.getTracks().forEach(t=>t.stop()); camState.stream=null; } if(camState.redraw) window.removeEventListener('resize', camState.redraw); }
 function closeCamera(){ stopCam(); go('settings'); }
 function backToGame(){ stopCam(); go('game'); }
 function camClose(){ if(camState.scoring && state.match) backToGame(); else closeCamera(); }
@@ -806,6 +806,62 @@ function camScoreUndo(){
   else if(state.match.turns.length){ state.match.turns.pop(); camState.turnMarks=[]; }
   state.mult='S'; DB.save('current',{match:state.match,darts:state.darts,mult:state.mult}); camState.redraw&&camState.redraw();
 }
+/* — auto-detektering (frame-diff), experimentell — */
+function grabFrame(){
+  const vid=camState.vid, canvas=camState.canvas, proc=camState.proc;
+  if(!vid||!canvas||!proc||!vid.videoWidth) return null;
+  const vw=vid.videoWidth, vh=vid.videoHeight, dw=canvas.width, dh=canvas.height;
+  const s=Math.max(dw/vw, dh/vh), sW=dw/s, sH=dh/s, sx=(vw-sW)/2, sy=(vh-sH)/2;
+  const p=proc.getContext('2d'); p.drawImage(vid,sx,sy,sW,sH,0,0,proc.width,proc.height);
+  return p.getImageData(0,0,proc.width,proc.height);
+}
+function diffFrame(ref,cur){
+  const a=ref.data,b=cur.data,w=cur.width,h=cur.height; let c=0,sx=0,sy=0;
+  for(let y=0;y<h;y++) for(let x=0;x<w;x++){ const i=(y*w+x)*4;
+    const la=a[i]*.299+a[i+1]*.587+a[i+2]*.114, lb=b[i]*.299+b[i+1]*.587+b[i+2]*.114;
+    if(Math.abs(la-lb)>34){ c++; sx+=x; sy+=y; } }
+  return c? {count:c,cx:sx/c,cy:sy/c} : {count:0,cx:0,cy:0};
+}
+function rearmRef(){ camState.refData=grabFrame(); if(camState.det) camState.det.stableCount=0; }
+function startDetect(){
+  const canvas=camState.canvas; if(!canvas) return;
+  const proc=document.createElement('canvas');
+  proc.width=200; proc.height=Math.max(120,Math.round(200*(canvas.height||1)/(canvas.width||1)));
+  camState.proc=proc; camState.refData=null; camState.suggestion=null;
+  camState.det={stableCount:0,lastCx:0,lastCy:0,lastCount:0};
+  setTimeout(()=>{ camState.refData=grabFrame(); },500);
+  camState.detTimer=setInterval(detectTick,130);
+}
+function stopDetect(){ if(camState.detTimer){ clearInterval(camState.detTimer); camState.detTimer=null; } camState.proc=null; camState.refData=null; camState.suggestion=null; }
+function detectTick(){
+  if(!camState.auto || camState.suggestion) return;
+  const cur=grabFrame(); if(!cur) return;
+  if(!camState.refData){ camState.refData=cur; return; }
+  const d=diffFrame(camState.refData,cur), A=cur.width*cur.height, ratio=d.count/A, det=camState.det;
+  if(ratio>0.10 || ratio<0.0035){ det.stableCount=0; det.lastCount=d.count; det.lastCx=d.cx; det.lastCy=d.cy; return; }
+  const moved=Math.hypot(d.cx-det.lastCx,d.cy-det.lastCy);
+  if(moved<3 && Math.abs(d.count-det.lastCount)<A*0.002) det.stableCount++; else det.stableCount=1;
+  det.lastCx=d.cx; det.lastCy=d.cy; det.lastCount=d.count;
+  if(det.stableCount>=3){ det.stableCount=0; emitSuggestion(d.cx,d.cy); }
+}
+function emitSuggestion(cx,cy){
+  const canvas=camState.canvas, proc=camState.proc; if(!canvas||!proc) return;
+  const dx=cx*canvas.width/proc.width, dy=cy*canvas.height/proc.height;
+  const f=boardToField(...pxToBoard(camState.points,canvas.width,canvas.height,dx,dy));
+  camState.suggestion={x:dx,y:dy,f}; haptic([40]); camState.redraw&&camState.redraw();
+}
+function confirmSuggestion(){
+  const s=camState.suggestion; if(!s||!state.match) return;
+  if(camState.turnEnded){ camState.turnMarks=[]; camState.turnEnded=false; }
+  camState.turnMarks=camState.turnMarks||[]; camState.turnMarks.push({x:s.x,y:s.y,label:s.f.label});
+  applyThrow({val:s.f.val,label:s.f.label,isDouble:s.f.isDouble,isTreble:s.f.isTreble});
+  if(state.darts.length===0) camState.turnEnded=true;
+  camState.suggestion=null; DB.save('current',{match:state.match,darts:state.darts,mult:state.mult});
+  const sim=simulate(state.match); if(sim.finished){ saveMatch(state.match,sim); stopCam(); go('summary'); return; }
+  rearmRef(); camState.redraw&&camState.redraw();
+}
+function dismissSuggestion(){ camState.suggestion=null; rearmRef(); camState.redraw&&camState.redraw(); }
+function toggleAuto(){ camState.auto=!camState.auto; if(camState.auto) startDetect(); else stopDetect(); camState.redraw&&camState.redraw(); }
 /* — homografi (4 punkter, src->dst) i ren JS — */
 function gauss(A,b){
   const n=b.length, M=A.map((r,i)=>[...r,b[i]]);
@@ -852,7 +908,7 @@ function initCamera(){
   if(!vid||!canvas) return;
   const saved=DB.load('camCalib',null);
   camState.points = saved? saved.slice() : [];
-  camState.lastTap=null;
+  camState.lastTap=null; camState.vid=vid; camState.canvas=canvas;
   function px(n){ return [n[0]*canvas.width, n[1]*canvas.height]; }
   function redraw(){
     canvas.width=canvas.clientWidth; canvas.height=canvas.clientHeight;
@@ -864,11 +920,21 @@ function initCamera(){
       const dot=(x,y)=>{ ctx.fillStyle='#fff'; ctx.strokeStyle='#34D399'; ctx.lineWidth=2.5; ctx.beginPath(); ctx.arc(x,y,6,0,Math.PI*2); ctx.fill(); ctx.stroke(); };
       if(isSaved && camState.scoring && state.match){
         (camState.turnMarks||[]).forEach(mk=>dot(mk.x,mk.y));
-        const sim=simulate(state.match), cur=sim.cur;
-        const rem=sim.rem[cur]-state.darts.reduce((a,x)=>a+x.val,0);
-        const thrown=(camState.turnMarks||[]).map(mk=>mk.label).join('  ')||'–';
-        camStatus(state.match.config.players[cur]+' · kvar '+rem+'   ['+thrown+']');
-        camButtons([['Ångra','camScoreUndo'],['Knappsats','backToGame']]);
+        if(camState.suggestion){
+          const sg=camState.suggestion;
+          ctx.fillStyle='rgba(56,199,251,.92)'; ctx.strokeStyle='#fff'; ctx.lineWidth=3;
+          ctx.beginPath(); ctx.arc(sg.x,sg.y,10,0,Math.PI*2); ctx.fill(); ctx.stroke();
+          camStatus('Förslag: '+fieldText(sg.f)+' — stämmer det?');
+          camButtons([['✓ Bekräfta','confirmSuggestion'],['✗ Avfärda','dismissSuggestion']]);
+        } else {
+          const sim=simulate(state.match), cur=sim.cur;
+          const rem=sim.rem[cur]-state.darts.reduce((a,x)=>a+x.val,0);
+          const thrown=(camState.turnMarks||[]).map(mk=>mk.label).join('  ')||'–';
+          camStatus(state.match.config.players[cur]+' · kvar '+rem+(camState.auto?'  ·  auto på':'')+'   ['+thrown+']');
+          camButtons(camState.auto
+            ? [['Ångra','camScoreUndo'],['Återställ ref','rearmRef'],['Auto: på','toggleAuto']]
+            : [['Ångra','camScoreUndo'],['Knappsats','backToGame'],['Auto: av','toggleAuto']]);
+        }
       } else if(isSaved){
         if(camState.lastTap) dot(camState.lastTap.x,camState.lastTap.y);
         camStatus(camState.lastTap? '🎯 '+fieldText(camState.lastTap.f) : 'Tappa på en pil för att testa fältet');
@@ -895,6 +961,7 @@ function initCamera(){
       camState.turnMarks=camState.turnMarks||[]; camState.turnMarks.push({x:cx,y:cy,label:f.label});
       applyThrow({val:f.val,label:f.label,isDouble:f.isDouble,isTreble:f.isTreble});
       if(state.darts.length===0) camState.turnEnded=true;
+      camState.suggestion=null; if(camState.auto) rearmRef();
       DB.save('current',{match:state.match,darts:state.darts,mult:state.mult});
       const sim=simulate(state.match);
       if(sim.finished){ saveMatch(state.match,sim); stopCam(); go('summary'); return; }
