@@ -72,8 +72,10 @@
   .scorehero .who{font-size:13px;color:var(--accent);font-weight:700;text-transform:uppercase;letter-spacing:.06em}
   .scorehero .rem{font-size:78px;font-weight:800;line-height:1;letter-spacing:-.04em;margin-top:2px}
   .scorehero .rem.buffer{color:var(--sec)}
-  .scorehero .co{margin-top:10px;min-height:28px;display:flex;gap:6px;justify-content:center;flex-wrap:wrap}
-  .scorehero .co .x{background:rgba(52,211,153,.13);color:var(--accent);font-weight:700;font-size:13px;padding:5px 11px;border-radius:8px;border:1px solid var(--accent)}
+  .scorehero .co{margin-top:9px;min-height:26px;display:flex;flex-direction:column;gap:5px;align-items:center}
+  .coroute{display:flex;gap:5px;justify-content:center;flex-wrap:wrap}
+  .coroute .x{background:rgba(52,211,153,.13);color:var(--accent);font-weight:700;font-size:13px;padding:4px 10px;border-radius:8px;border:1px solid var(--accent)}
+  .coroute.alt .x{background:transparent;color:var(--txt2);border-color:var(--border2);font-weight:600}
   .players{display:flex;gap:8px;overflow-x:auto;padding:4px 16px 10px}
   .pcard{flex:0 0 auto;min-width:100px;background:var(--surface);border:1px solid var(--border);border-radius:14px;padding:10px 14px;transition:.15s}
   .pcard.active{border-color:var(--accent);background:rgba(52,211,153,.09);box-shadow:0 6px 18px -8px var(--accent)}
@@ -192,6 +194,35 @@ function checkout(kvar,regel,pilarKvar=3){
   if(regel==='double'&&OMOJLIGA_DO.has(kvar))return[];
   for(let p=1;p<=pilarKvar;p++){ const v=sokMedPilar(kvar,regel,p); if(v)return v; }
   return [];
+}
+/* flera checkout-vägar — populära avslut (D16, D20 …) prioriterade */
+const PREF_DOUBLES=[16,20,8,12,10,18,14,4,2,6,11,19,17,15,13,9,7,5,3,1];
+const PRE_FIELDS=(function(){ const a=[]; for(let n=20;n>=1;n--)a.push(['T'+n,3*n]); a.push(['Bull',50]); for(let n=20;n>=1;n--)a.push(['S'+n,n]); a.push(['25',25]); return a; })();
+function comboExact(summa,pilar){
+  if(pilar===0) return summa===0?[]:null;
+  for(const [et,po] of PRE_FIELDS){ if(po>summa) continue; const rest=comboExact(summa-po,pilar-1); if(rest) return [et,...rest]; }
+  return null;
+}
+function routeForFinish(kvar,finLabel,finVal,pilarKvar){
+  if(kvar<finVal) return null;
+  const pre=kvar-finVal;
+  if(pre===0) return pilarKvar>=1?[finLabel]:null;
+  for(let p=1;p<=pilarKvar-1;p++){ const c=comboExact(pre,p); if(c) return [...c,finLabel]; }
+  return null;
+}
+function checkoutOptions(kvar,regel,pilarKvar=3,max=3){
+  const primary=checkout(kvar,regel,pilarKvar);
+  if(!primary.length) return [];
+  const routes=[], seen=new Set();
+  const add=r=>{ if(!r||!r.length) return; const k=r.join(' '); if(seen.has(k)) return; seen.add(k); routes.push(r); };
+  add(primary);
+  const minLen=primary.length, fins=[];
+  if(regel!=='single'){ for(const n of PREF_DOUBLES) fins.push(['D'+n,2*n]); fins.push(['Bull',50]); }
+  if(regel==='master'){ for(let n=20;n>=1;n--) fins.push(['T'+n,3*n]); }
+  if(regel==='single'){ for(let n=20;n>=1;n--) fins.push(['S'+n,n]); for(const n of PREF_DOUBLES) fins.push(['D'+n,2*n]); fins.push(['Bull',50]); }
+  for(const [lab,val] of fins){ if(routes.length>=max) break; const r=routeForFinish(kvar,lab,val,pilarKvar); if(r&&r.length===minLen) add(r); }
+  for(const [lab,val] of fins){ if(routes.length>=max) break; const r=routeForFinish(kvar,lab,val,pilarKvar); if(r&&r.length<=minLen+1) add(r); }
+  return routes.slice(0,max);
 }
 
 /* ---- match simulation (recompute everything from the turn log) ---- */
@@ -377,7 +408,7 @@ function viewGame(){
   const startRem=sim.rem[cur];
   const used=state.darts.reduce((a,d)=>a+d.val,0);
   const curRem=startRem-used;
-  const co=checkout(curRem, m.config.outRule, 3-state.darts.length);
+  const coOpts=checkoutOptions(curRem, m.config.outRule, 3-state.darts.length, 3);
   const name=m.config.players[cur];
   const slots=[0,1,2].map(i=>{ const d=state.darts[i];
     return `<span class="dchip ${d?'on':''}">${d?d.label:'&middot;'}</span>`; }).join('');
@@ -397,7 +428,7 @@ function viewGame(){
     <div class="scorehero" style="padding-bottom:2px">
       <div class="who">${esc(name)}</div>
       <div class="rem">${curRem}</div>
-      <div class="co">${co.map(x=>`<span class="x">${x}</span>`).join('')}</div>
+      <div class="co">${coOpts.map((r,i)=>`<div class="coroute${i?' alt':''}">${r.map(x=>`<span class="x">${x}</span>`).join('')}</div>`).join('')}</div>
     </div>
     <div class="dartslots">${slots}</div>
     <div class="multrow">
