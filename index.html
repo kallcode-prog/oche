@@ -43,6 +43,17 @@
   #app.game .dartgrid{flex:1;min-height:0;grid-template-rows:repeat(4,1fr)}
   #app.game .dartgrid button{padding:0;display:flex;align-items:center;justify-content:center}
   #app.game .dartspecial{padding:8px 16px max(14px,env(safe-area-inset-bottom))}
+  #app.cam{padding-bottom:0;min-height:0;height:100vh;height:100dvh;overflow:hidden}
+  .camwrap{position:relative;width:100%;height:100%;background:#000;overflow:hidden}
+  #camvid{position:absolute;inset:0;width:100%;height:100%;object-fit:cover}
+  #camcanvas{position:absolute;inset:0;width:100%;height:100%;touch-action:manipulation;cursor:crosshair}
+  .camtop{position:absolute;top:0;left:0;right:0;display:flex;align-items:center;gap:12px;padding:12px 14px;background:linear-gradient(to bottom,rgba(0,0,0,.55),transparent);color:#fff;z-index:3}
+  .camtop .ttl{font-weight:700}
+  .camtop .x{width:40px;height:40px;border-radius:10px;border:1px solid rgba(255,255,255,.3);background:rgba(0,0,0,.35);color:#fff;font-size:20px;cursor:pointer}
+  .cambar{position:absolute;left:0;right:0;bottom:0;padding:14px 16px max(16px,env(safe-area-inset-bottom));background:linear-gradient(to top,rgba(0,0,0,.72),transparent);z-index:3}
+  #camstatus{color:#fff;font-weight:600;text-align:center;margin-bottom:10px;text-shadow:0 1px 4px rgba(0,0,0,.7)}
+  #cambtns{display:flex;gap:8px}
+  #cambtns .btn{flex:1;margin:0}
   .view{flex:1;padding:16px}
   h1,h2,h3{margin:0;font-weight:600}
   button{font-family:inherit}
@@ -317,6 +328,7 @@ function simulate(match){
 
 /* ============================== app state & router ============================== */
 let state = { view:'home', match:null, buffer:'', setup:null, pendingCheckout:null, training:null, darts:[], mult:'S', statsPlayer:null };
+let camState = { stream:null, points:[], redraw:null };
 
 function go(v){ state.view=v; render(); }
 function toast(msg,ok=false){
@@ -393,6 +405,14 @@ function viewSettings(){
         <button class="btn secondary" style="flex:1" onclick="importBackupPrompt()">Återställ</button>
       </div>
       <input type="file" id="restoreFile" accept="application/json" style="display:none" onchange="if(this.files[0])importBackup(this.files[0])">
+    </div>
+    <div class="card">
+      <div style="display:flex;align-items:center;gap:12px;margin-bottom:12px">
+        <span class="ico">&#128247;</span>
+        <div style="flex:1"><div style="font-size:16px;font-weight:500">Kamera (beta)</div>
+        <div class="muted" style="text-transform:none;letter-spacing:0">Kalibrera tavlan mot kameran</div></div>
+      </div>
+      <button class="btn secondary" onclick="openCamera()">Öppna kameraläge</button>
     </div>
     <div class="muted" style="text-align:center;margin-top:8px">Oche &middot; offline dart scorer</div>
   </div>`;
@@ -735,9 +755,103 @@ function ttBob27(tr){
     </div>`;
 }
 
+/* ============================== kamera (beta) ============================== */
+/* Tavlans geometri i mm + kalibreringspunkter (ytterkant double): 20, 6, 3, 11 */
+const CALIB_SRC=[[0,170],[170,0],[0,-170],[-170,0]];
+const CALIB_PROMPTS=['20 (toppen)','6 (höger)','3 (botten)','11 (vänster)'];
+function viewCamera(){
+  return `<div class="camwrap">
+    <video id="camvid" autoplay playsinline muted></video>
+    <canvas id="camcanvas"></canvas>
+    <div class="camtop"><button class="x" onclick="closeCamera()">&times;</button><span class="ttl">Kamera (beta)</span></div>
+    <div class="cambar"><div id="camstatus">Startar kameran…</div><div id="cambtns"></div></div>
+  </div>`;
+}
+function openCamera(){ camState.points=[]; go('camera'); }
+function closeCamera(){
+  if(camState.stream){ camState.stream.getTracks().forEach(t=>t.stop()); camState.stream=null; }
+  if(camState.redraw) window.removeEventListener('resize', camState.redraw);
+  go('settings');
+}
+/* — homografi (4 punkter, src->dst) i ren JS — */
+function gauss(A,b){
+  const n=b.length, M=A.map((r,i)=>[...r,b[i]]);
+  for(let c=0;c<n;c++){
+    let p=c; for(let r=c+1;r<n;r++) if(Math.abs(M[r][c])>Math.abs(M[p][c])) p=r;
+    [M[c],M[p]]=[M[p],M[c]];
+    const piv=M[c][c]||1e-9;
+    for(let r=0;r<n;r++){ if(r===c) continue; const f=M[r][c]/piv; for(let k=c;k<=n;k++) M[r][k]-=f*M[c][k]; }
+  }
+  return M.map((r,i)=>r[n]/(r[i]||1e-9));
+}
+function solveH(src,dst){
+  const A=[],b=[];
+  for(let i=0;i<4;i++){ const [x,y]=src[i],[u,v]=dst[i];
+    A.push([x,y,1,0,0,0,-x*u,-y*u]); b.push(u);
+    A.push([0,0,0,x,y,1,-x*v,-y*v]); b.push(v);
+  }
+  const h=gauss(A,b);
+  return [[h[0],h[1],h[2]],[h[3],h[4],h[5]],[h[6],h[7],1]];
+}
+function applyH(H,x,y){ const d=H[2][0]*x+H[2][1]*y+H[2][2];
+  return [(H[0][0]*x+H[0][1]*y+H[0][2])/d,(H[1][0]*x+H[1][1]*y+H[1][2])/d]; }
+function drawBoard(ctx,H){
+  const acc=getComputedStyle(document.documentElement).getPropertyValue('--accent').trim()||'#34D399';
+  ctx.strokeStyle=acc; ctx.fillStyle=acc; ctx.lineWidth=1.8; ctx.globalAlpha=.92;
+  const ring=r=>{ ctx.beginPath();
+    for(let a=0;a<=360;a+=5){ const t=a*Math.PI/180,[u,v]=applyH(H,r*Math.cos(t),r*Math.sin(t)); a?ctx.lineTo(u,v):ctx.moveTo(u,v);} ctx.closePath(); ctx.stroke(); };
+  [6.35,15.9,99,107,162,170].forEach(ring);
+  for(let k=0;k<20;k++){ const t=((90-9-18*k)*Math.PI/180);
+    const [u1,v1]=applyH(H,15.9*Math.cos(t),15.9*Math.sin(t)),[u2,v2]=applyH(H,170*Math.cos(t),170*Math.sin(t));
+    ctx.beginPath(); ctx.moveTo(u1,v1); ctx.lineTo(u2,v2); ctx.stroke(); }
+  ctx.globalAlpha=1; ctx.font='bold 15px sans-serif'; ctx.textAlign='center'; ctx.textBaseline='middle';
+  [['20',0,150],['6',150,0],['3',0,-150],['11',-150,0]].forEach(([n,x,y])=>{ const [u,v]=applyH(H,x,y);
+    ctx.lineWidth=3; ctx.strokeStyle='rgba(0,0,0,.6)'; ctx.strokeText(n,u,v); ctx.fillText(n,u,v); });
+}
+function camStatus(t){ const e=document.getElementById('camstatus'); if(e) e.textContent=t; }
+function camButtons(list){ const e=document.getElementById('cambtns'); if(!e) return;
+  e.innerHTML=list.map(([lbl,fn])=>`<button class="btn ${fn==='saveCalib'?'':'secondary'}" onclick="${fn}()">${lbl}</button>`).join(''); }
+function undoTap(){ camState.points.pop(); camState.redraw&&camState.redraw(); }
+function recalibrate(){ camState.points=[]; DB.save('camCalib',null); camState.redraw&&camState.redraw(); }
+function saveCalib(){ DB.save('camCalib', camState.points.slice(0,4)); toast('Kalibrering sparad',true); camState.redraw&&camState.redraw(); }
+function initCamera(){
+  const vid=document.getElementById('camvid'), canvas=document.getElementById('camcanvas');
+  if(!vid||!canvas) return;
+  const saved=DB.load('camCalib',null);
+  camState.points = saved? saved.slice() : [];
+  function px(n){ return [n[0]*canvas.width, n[1]*canvas.height]; }
+  function redraw(){
+    canvas.width=canvas.clientWidth; canvas.height=canvas.clientHeight;
+    const ctx=canvas.getContext('2d'); ctx.clearRect(0,0,canvas.width,canvas.height);
+    if(camState.points.length>=4){
+      const H=solveH(CALIB_SRC, camState.points.slice(0,4).map(px));
+      drawBoard(ctx,H);
+      if(DB.load('camCalib',null)){ camStatus('Kalibrerad ✓ — ligger rutnätet rätt på tavlan?'); camButtons([['Kalibrera om','recalibrate'],['Stäng','closeCamera']]); }
+      else { camStatus('Ser rutnätet rätt ut på tavlan?'); camButtons([['Spara kalibrering','saveCalib'],['Gör om','recalibrate']]); }
+    } else {
+      const ctx2=canvas.getContext('2d');
+      camState.points.forEach(n=>{ const [u,v]=px(n); ctx2.fillStyle='#34D399'; ctx2.beginPath(); ctx2.arc(u,v,8,0,Math.PI*2); ctx2.fill(); ctx2.strokeStyle='#fff'; ctx2.lineWidth=2; ctx2.stroke(); });
+      camStatus('Tappa ytterkanten på '+CALIB_PROMPTS[camState.points.length]);
+      camButtons(camState.points.length? [['Ångra senaste','undoTap']] : []);
+    }
+  }
+  camState.redraw=redraw;
+  canvas.onclick=e=>{
+    if(camState.points.length>=4) return;
+    const r=canvas.getBoundingClientRect();
+    camState.points.push([(e.clientX-r.left)/r.width,(e.clientY-r.top)/r.height]); redraw();
+  };
+  window.addEventListener('resize', redraw);
+  if(!navigator.mediaDevices||!navigator.mediaDevices.getUserMedia){ camStatus('Kameran stöds inte i denna webbläsare.'); redraw(); return; }
+  navigator.mediaDevices.getUserMedia({video:{facingMode:{ideal:'environment'}},audio:false})
+    .then(s=>{ camState.stream=s; vid.srcObject=s; const p=vid.play&&vid.play(); if(p&&p.catch)p.catch(()=>{}); setTimeout(redraw,300); })
+    .catch(err=>{ camStatus('Kunde inte öppna kameran ('+err.name+'). Tillåt kameraåtkomst och försök igen.'); });
+  redraw();
+}
+
 /* ============================== nav ============================== */
 function navbar(){
-  if(['game','summary','trainingActive'].includes(state.view)) return '';
+  if(['game','summary','trainingActive','camera'].includes(state.view)) return '';
   const items=[['home','&#127968;','Hem'],['training','&#127919;','Tr&auml;na'],['stats','&#128202;','Statistik'],['settings','&#9881;','Mer']];
   return `<div class="nav">${items.map(([v,ic,l])=>
     `<button class="${state.view===v?'on':''}" onclick="go('${v}')"><span class="ico">${ic}</span>${l}</button>`).join('')}</div>`;
@@ -757,11 +871,13 @@ function render(){
     case 'trainingActive': html=viewTrainingActive(); break;
     case 'settings': html=viewSettings(); break;
     case 'playerStats': html=viewPlayerStats(); break;
+    case 'camera': html=viewCamera(); break;
     default: html=viewHome();
   }
-  app.className = state.view==='game' ? 'game' : ((state.view==='trainingActive'||state.view==='summary') ? 'nonav' : '');
+  app.className = state.view==='game' ? 'game' : state.view==='camera' ? 'cam' : ((state.view==='trainingActive'||state.view==='summary') ? 'nonav' : '');
   document.body.classList.toggle('playing', state.view==='game');
   app.innerHTML=html+navbar();
+  if(state.view==='camera') requestAnimationFrame(initCamera);
   if(state.view==='game' && state.match) DB.save('current',{match:state.match,darts:state.darts,mult:state.mult});
   if(state.pendingCheckout) renderCheckoutSheet();
 }
