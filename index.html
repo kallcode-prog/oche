@@ -328,7 +328,7 @@ function simulate(match){
 
 /* ============================== app state & router ============================== */
 let state = { view:'home', match:null, buffer:'', setup:null, pendingCheckout:null, training:null, darts:[], mult:'S', statsPlayer:null };
-let camState = { stream:null, points:[], redraw:null };
+let camState = { stream:null, points:[], redraw:null, scoring:false, turnMarks:[], turnEnded:false, lastTap:null };
 
 function go(v){ state.view=v; render(); }
 function toast(msg,ok=false){
@@ -482,7 +482,10 @@ function viewGame(){
   return `<div class="gametop">
       <button class="iconbtn" onclick="quitGame()" title="Avsluta">&times;</button>
       <div class="pill">Set ${sim.setNumber} &middot; Leg ${sim.legNumber}</div>
-      <button class="iconbtn" onclick="undo()" title="&Aring;ngra tur">&#8634;</button>
+      <div style="display:flex;gap:8px">
+        <button class="iconbtn" onclick="openCameraScoring()" title="Kamera">&#128247;</button>
+        <button class="iconbtn" onclick="undo()" title="&Aring;ngra tur">&#8634;</button>
+      </div>
     </div>
     <div class="players">
       ${m.config.players.map((p,i)=>`<div class="pcard ${i===cur?'active':''}">
@@ -786,15 +789,22 @@ function viewCamera(){
   return `<div class="camwrap">
     <video id="camvid" autoplay playsinline muted></video>
     <canvas id="camcanvas"></canvas>
-    <div class="camtop"><button class="x" onclick="closeCamera()">&times;</button><span class="ttl">Kamera (beta)</span></div>
+    <div class="camtop"><button class="x" onclick="camClose()">&times;</button><span class="ttl">Kamera (beta)</span></div>
     <div class="cambar"><div id="camstatus">Startar kameran…</div><div id="cambtns"></div></div>
   </div>`;
 }
-function openCamera(){ camState.points=[]; go('camera'); }
-function closeCamera(){
-  if(camState.stream){ camState.stream.getTracks().forEach(t=>t.stop()); camState.stream=null; }
-  if(camState.redraw) window.removeEventListener('resize', camState.redraw);
-  go('settings');
+function openCamera(){ camState.scoring=false; camState.lastTap=null; go('camera'); }
+function openCameraScoring(){ camState.scoring=true; camState.turnMarks=[]; camState.turnEnded=false; camState.lastTap=null; go('camera'); }
+function stopCam(){ if(camState.stream){ camState.stream.getTracks().forEach(t=>t.stop()); camState.stream=null; } if(camState.redraw) window.removeEventListener('resize', camState.redraw); }
+function closeCamera(){ stopCam(); go('settings'); }
+function backToGame(){ stopCam(); go('game'); }
+function camClose(){ if(camState.scoring && state.match) backToGame(); else closeCamera(); }
+function camScoreUndo(){
+  if(!state.match) return;
+  if(camState.turnEnded){ state.match.turns.pop(); camState.turnEnded=false; camState.turnMarks=[]; }
+  else if(state.darts.length>0){ state.darts.pop(); camState.turnMarks.pop(); }
+  else if(state.match.turns.length){ state.match.turns.pop(); camState.turnMarks=[]; }
+  state.mult='S'; DB.save('current',{match:state.match,darts:state.darts,mult:state.mult}); camState.redraw&&camState.redraw();
 }
 /* — homografi (4 punkter, src->dst) i ren JS — */
 function gauss(A,b){
@@ -850,13 +860,22 @@ function initCamera(){
     if(camState.points.length>=4){
       const H=solveH(CALIB_SRC, camState.points.slice(0,4).map(px));
       drawBoard(ctx,H);
-      if(camState.lastTap){ const {x,y}=camState.lastTap;
-        ctx.fillStyle='#fff'; ctx.strokeStyle='#34D399'; ctx.lineWidth=2.5;
-        ctx.beginPath(); ctx.arc(x,y,6,0,Math.PI*2); ctx.fill(); ctx.stroke(); }
-      if(DB.load('camCalib',null)){
+      const isSaved=!!DB.load('camCalib',null);
+      const dot=(x,y)=>{ ctx.fillStyle='#fff'; ctx.strokeStyle='#34D399'; ctx.lineWidth=2.5; ctx.beginPath(); ctx.arc(x,y,6,0,Math.PI*2); ctx.fill(); ctx.stroke(); };
+      if(isSaved && camState.scoring && state.match){
+        (camState.turnMarks||[]).forEach(mk=>dot(mk.x,mk.y));
+        const sim=simulate(state.match), cur=sim.cur;
+        const rem=sim.rem[cur]-state.darts.reduce((a,x)=>a+x.val,0);
+        const thrown=(camState.turnMarks||[]).map(mk=>mk.label).join('  ')||'–';
+        camStatus(state.match.config.players[cur]+' · kvar '+rem+'   ['+thrown+']');
+        camButtons([['Ångra','camScoreUndo'],['Knappsats','backToGame']]);
+      } else if(isSaved){
+        if(camState.lastTap) dot(camState.lastTap.x,camState.lastTap.y);
         camStatus(camState.lastTap? '🎯 '+fieldText(camState.lastTap.f) : 'Tappa på en pil för att testa fältet');
         camButtons([['Kalibrera om','recalibrate'],['Stäng','closeCamera']]);
-      } else { camStatus('Ser rutnätet rätt ut på tavlan?'); camButtons([['Spara kalibrering','saveCalib'],['Gör om','recalibrate']]); }
+      } else {
+        camStatus('Ser rutnätet rätt ut på tavlan?'); camButtons([['Spara kalibrering','saveCalib'],['Gör om','recalibrate']]);
+      }
     } else {
       const ctx2=canvas.getContext('2d');
       camState.points.forEach(n=>{ const [u,v]=px(n); ctx2.fillStyle='#34D399'; ctx2.beginPath(); ctx2.arc(u,v,8,0,Math.PI*2); ctx2.fill(); ctx2.strokeStyle='#fff'; ctx2.lineWidth=2; ctx2.stroke(); });
@@ -870,9 +889,18 @@ function initCamera(){
     const x=e.clientX-r.left, y=e.clientY-r.top;
     if(camState.points.length<4){ camState.points.push([x/r.width,y/r.height]); camState.lastTap=null; redraw(); return; }
     const cx=x*canvas.width/r.width, cy=y*canvas.height/r.height;
-    const [bx,by]=pxToBoard(camState.points, canvas.width, canvas.height, cx, cy);
-    camState.lastTap={x:cx,y:cy,f:boardToField(bx,by)};
-    redraw();
+    const f=boardToField(...pxToBoard(camState.points, canvas.width, canvas.height, cx, cy));
+    if(camState.scoring && state.match){
+      if(camState.turnEnded){ camState.turnMarks=[]; camState.turnEnded=false; }
+      camState.turnMarks=camState.turnMarks||[]; camState.turnMarks.push({x:cx,y:cy,label:f.label});
+      applyThrow({val:f.val,label:f.label,isDouble:f.isDouble,isTreble:f.isTreble});
+      if(state.darts.length===0) camState.turnEnded=true;
+      DB.save('current',{match:state.match,darts:state.darts,mult:state.mult});
+      const sim=simulate(state.match);
+      if(sim.finished){ saveMatch(state.match,sim); stopCam(); go('summary'); return; }
+      redraw(); return;
+    }
+    camState.lastTap={x:cx,y:cy,f}; redraw();
   };
   window.addEventListener('resize', redraw);
   if(!navigator.mediaDevices||!navigator.mediaDevices.getUserMedia){ camStatus('Kameran stöds inte i denna webbläsare.'); redraw(); return; }
@@ -1004,7 +1032,7 @@ function tapNumber(n){
   state.mult='S'; addDart({val,label,isDouble,isTreble});
 }
 function tapVal(val,label,isDouble){ state.mult='S'; addDart({val,label,isDouble,isTreble:false}); }
-function addDart(d){
+function applyThrow(d){
   const m=state.match, sim=simulate(m), cur=sim.cur;
   const startRem=sim.rem[cur];
   const used=state.darts.reduce((a,x)=>a+x.val,0);
@@ -1016,14 +1044,14 @@ function addDart(d){
   const throwsArr=[...state.darts,d].map(x=>({v:x.val,db:!!x.isDouble}));
   if(newRem<0 || (newRem===1 && outR==='double') || (newRem===0 && !validFinish)){
     m.turns.push({score:0,darts:dartsThrown,bust:true,throws:throwsArr});
-    state.darts=[]; state.mult='S'; toast('Bust!'); haptic([200]); render(); return;
+    state.darts=[]; state.mult='S'; toast('Bust!'); haptic([200]); return 'bust';
   }
   if(newRem===0){
     const coScore=used+d.val;
     m.turns.push({score:coScore,darts:dartsThrown,checkout:true,throws:throwsArr});
     state.darts=[]; state.mult='S'; toast('Leg vunnen!',true); haptic([120]); caller('Game shot');
     if(coScore>=100) celebrateScore(coScore);
-    render(); return;
+    return 'checkout';
   }
   state.darts.push(d);
   if(state.darts.length===3){
@@ -1032,8 +1060,9 @@ function addDart(d){
     celebrateScore(sum);
     state.darts=[]; state.mult='S';
   }
-  render();
+  return 'ok';
 }
+function addDart(d){ applyThrow(d); render(); }
 function backDart(){
   if(state.darts.length>0){ state.darts.pop(); render(); return; }
   undo();
