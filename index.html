@@ -29,7 +29,11 @@
   }
   #app{max-width:560px;margin:0 auto;min-height:100%;display:flex;flex-direction:column;padding-bottom:88px}
   #app.nonav{padding-bottom:0}
-  #app.game{padding-bottom:0;height:100vh;height:100dvh;overflow:hidden}
+  #app.game{padding-bottom:0;min-height:0;height:100vh;height:100dvh;overflow:hidden}
+  @media (hover:hover) and (pointer:fine){
+    body.playing{display:flex;align-items:center;justify-content:center;min-height:100vh;min-height:100dvh}
+    #app.game{height:min(100vh,780px);height:min(100dvh,780px)}
+  }
   #app.game .scorehero .rem{font-size:clamp(40px,9vh,74px)}
   #app.game .scorehero{padding:2px 0 2px}
   #app.game .scorehero .who{font-size:12px}
@@ -725,6 +729,7 @@ function render(){
     default: html=viewHome();
   }
   app.className = state.view==='game' ? 'game' : ((state.view==='trainingActive'||state.view==='summary') ? 'nonav' : '');
+  document.body.classList.toggle('playing', state.view==='game');
   app.innerHTML=html+navbar();
   if(state.view==='game' && state.match) DB.save('current',{match:state.match,darts:state.darts,mult:state.mult});
   if(state.pendingCheckout) renderCheckoutSheet();
