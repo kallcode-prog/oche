@@ -600,6 +600,7 @@ function viewTraining(){
     ['trebles','&#9650;','Trebles Practice','Tr&auml;na p&aring; treble-f&auml;lten','%'],
     ['bulls','&#9678;','Bulls Practice','Tr&auml;na p&aring; bullseye','%'],
     ['bob27','&#127919;',"Bob's 27",'Dubbel-utmaning D1 till Bull','p'],
+    ['c121','&#11014;','121','Kl&auml;ttra fr&aring;n 121 — checka & h&ouml;j','p'],
     ['halveit','&#9889;','Halve-it','Missar du halveras po&auml;ngen','p'],
   ];
   return topbar('Tr&auml;ning')+`<div class="view">
@@ -685,6 +686,7 @@ function viewTrainingActive(){
     case 'halveit': return ttHalveit(tr);
     case 'shanghai': return ttShanghai(tr);
     case 'bob27': return ttBob27(tr);
+    case 'c121': return ttC121(tr);
     default: return ttSeq(tr);
   }
 }
@@ -762,6 +764,17 @@ function ttBob27(tr){
     `<div style="padding:8px 16px 24px">
       <div class="muted" style="text-align:center;margin-bottom:12px">Hur m&aring;nga av 3 tr&auml;ffade? (0 = po&auml;ng dras av)</div>
       <div class="chips">${[0,1,2,3].map(k=>`<div class="chip" onclick="bob27Mark(${k})">${k}</div>`).join('')}</div>
+    </div>`;
+}
+function ttC121(tr){
+  if(tr.attempts>=tr.maxAttempts){ saveTrainingResult('c121',tr.title,tr.best); return ttResult(tr, tr.success+' av '+tr.attempts+' lyckade · h&ouml;gsta '+(tr.best||'–'), (tr.best||0)+' p'); }
+  const route=checkout(tr.target,'double');
+  return thead(tr,'F&ouml;rs&ouml;k '+(tr.attempts+1)+'/'+tr.maxAttempts+' &middot; h&ouml;gsta '+(tr.best||'–')) +
+    `<div class="scorehero"><div class="who">Checka ut (3 pilar)</div><div class="rem">${tr.target}</div>
+      <div class="co"><div class="coroute">${route.map(x=>`<span class="x">${x}</span>`).join('')}</div></div></div>
+    <div style="padding:16px">
+      <button class="btn" onclick="c121Mark(true)">&#10003; Lyckades</button>
+      <button class="btn secondary" style="margin-top:10px" onclick="c121Mark(false)">&times; Missade</button>
     </div>`;
 }
 
@@ -1219,6 +1232,7 @@ function startTraining(id){
   else if(id==='trebles') tr={id,kind:'seq',title:'Trebles Practice',seq:[20,19,18,17,16,15,14,13,12,11].map(n=>'T'+n),index:0,hits:0,throws:0};
   else if(id==='halveit') tr={id,kind:'halveit',title:'Halve-it',targets:['15','16','Dubbel','17','18','Trippel','19','20','Bull'],index:0,total:40};
   else if(id==='bob27') tr={id,kind:'bob27',title:"Bob's 27",targets:[...Array.from({length:20},(_,i)=>'D'+(i+1)),'Bull'],index:0,score:27,out:false};
+  else if(id==='c121') tr={id,kind:'c121',title:'121',target:121,attempts:0,success:0,best:0,maxAttempts:9};
   else return;
   state.training=tr; state.buffer=''; go('trainingActive');
 }
@@ -1253,6 +1267,18 @@ function bob27Mark(k){ const tr=state.training; const t=tr.targets[tr.index]; co
   if(k>0) tr.score+=k*val; else tr.score-=val;
   if(tr.score<=0){ tr.score=0; tr.out=true; tr.label=t; }
   tr.index++; render(); }
+function nextCheckout(start, up){
+  let n=Math.max(2,Math.min(170,start));
+  for(let i=0;i<300;i++){
+    if(n>=2 && n<=170 && checkout(n,'double').length) return n;
+    n += up?1:-1; if(n<2) n=2; if(n>170) n=170;
+  }
+  return 40;
+}
+function c121Mark(ok){ const tr=state.training; tr.attempts++;
+  if(ok){ tr.success++; tr.best=Math.max(tr.best,tr.target); tr.target=nextCheckout(tr.target+1,true); }
+  else { tr.target=nextCheckout(tr.target-1,false); }
+  render(); }
 function scoringSubmit(){ const tr=state.training; if(state.buffer==='')return; let s=parseInt(state.buffer);
   if(isNaN(s))s=0; if(s>180){toast('Max 180');state.buffer='';render();return;}
   tr.scores.push(s); tr.index++; state.buffer=''; render(); }
