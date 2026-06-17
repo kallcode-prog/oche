@@ -776,15 +776,14 @@ function ttBob27(tr){
     </div>`;
 }
 function ttC121(tr){
-  if(tr.attempts>=tr.maxAttempts){ saveTrainingResult('c121',tr.title,tr.best); return ttResult(tr, tr.success+' av '+tr.attempts+' lyckade · h&ouml;gsta '+(tr.best||'–'), (tr.best||0)+' p'); }
-  const route=checkout(tr.target,'double');
-  return thead(tr,'F&ouml;rs&ouml;k '+(tr.attempts+1)+'/'+tr.maxAttempts+' &middot; h&ouml;gsta '+(tr.best||'–')) +
-    `<div class="scorehero"><div class="who">Checka ut &middot; ${tr.darts} pilar</div><div class="rem">${tr.target}</div>
-      <div class="co"><div class="coroute">${route.map(x=>`<span class="x">${x}</span>`).join('')}</div></div></div>
-    <div style="padding:16px">
-      <button class="btn" onclick="c121Mark(true)">&#10003; Lyckades</button>
-      <button class="btn secondary" style="margin-top:10px" onclick="c121Mark(false)">&times; Missade</button>
-    </div>`;
+  if(tr.over){ if(tr.best>0) saveTrainingResult('c121',tr.title,tr.best); return ttResult(tr, tr.checkouts+' utg&aring;ngar &middot; h&ouml;gsta '+(tr.best||'–'), (tr.best||0)+' p'); }
+  const buf=state.buffer;
+  const route=checkout(tr.rem,'double',3);
+  return thead(tr,'M&aring;l '+tr.target+' &middot; '+tr.dartsLeft+' pilar kvar') +
+    `<div class="scorehero"><div class="who">Checka ut &middot; h&ouml;gsta ${tr.best||'–'}</div>
+      <div class="rem ${buf!==''?'buffer':''}">${buf!==''?buf:tr.rem}</div>
+      <div class="co">${route.length?`<div class="coroute">${route.map(x=>`<span class="x">${x}</span>`).join('')}</div>`:''}</div></div>` +
+    numpadHTML('c121Submit');
 }
 
 /* ============================== kamera (beta) ============================== */
@@ -1265,7 +1264,7 @@ function startShanghai(count){
   state.buffer=''; go('trainingActive');
 }
 function startC121(darts){
-  state.training={id:'c121',kind:'c121',title:'121 · '+darts+' pilar',darts,target:121,attempts:0,success:0,best:0,maxAttempts:9};
+  state.training={id:'c121',kind:'c121',title:'121 · '+darts+' pilar',darts,target:121,rem:121,dartsLeft:darts,best:0,checkouts:0,over:false};
   state.buffer=''; go('trainingActive');
 }
 function repeatTraining(){ const tr=state.training;
@@ -1288,10 +1287,20 @@ function nextCheckout(start, up){
   }
   return 40;
 }
-function c121Mark(ok){ const tr=state.training; tr.attempts++;
-  if(ok){ tr.success++; tr.best=Math.max(tr.best,tr.target); tr.target=nextCheckout(tr.target+1,true); }
-  else { tr.target=nextCheckout(tr.target-1,false); }
-  render(); }
+function c121Submit(){ const tr=state.training; if(state.buffer==='')return; let s=parseInt(state.buffer);
+  if(isNaN(s))s=0; if(s>180){toast('Max 180');state.buffer='';render();return;}
+  const newRem=tr.rem-s;
+  if(newRem===0){ // utgång!
+    tr.checkouts++; tr.best=Math.max(tr.best,tr.target);
+    haptic([120]); caller('Game shot'); if(tr.target>=100) celebrateScore(tr.target);
+    tr.target=nextCheckout(tr.target+1,true); tr.rem=tr.target; tr.dartsLeft=tr.darts;
+    toast('Utgång! Nästa: '+tr.target,true); state.buffer=''; render(); return;
+  }
+  if(newRem<0 || newRem===1){ toast('Bust!'); haptic([200]); }  // rem oförändrad
+  else tr.rem=newRem;
+  tr.dartsLeft-=3;
+  if(tr.dartsLeft<=0) tr.over=true;
+  state.buffer=''; render(); }
 function scoringSubmit(){ const tr=state.training; if(state.buffer==='')return; let s=parseInt(state.buffer);
   if(isNaN(s))s=0; if(s>180){toast('Max 180');state.buffer='';render();return;}
   tr.scores.push(s); tr.index++; state.buffer=''; render(); }
@@ -1503,10 +1512,10 @@ function exportPDF(){
 /* ============================== keyboard ============================== */
 document.addEventListener('keydown',e=>{
   const k = (state.view==='trainingActive' && state.training) ? state.training.kind : null;
-  const numEntry = (k==='scoring' || k==='halveit');
+  const numEntry = (k==='scoring' || k==='halveit' || k==='c121');
   if(!numEntry || state.pendingCheckout) return;
   if(e.key>='0'&&e.key<='9') press(e.key);
-  else if(e.key==='Enter'){ k==='halveit'? halveitSubmit() : scoringSubmit(); }
+  else if(e.key==='Enter'){ k==='halveit'? halveitSubmit() : k==='c121'? c121Submit() : scoringSubmit(); }
   else if(e.key==='Backspace'){ e.preventDefault(); press('back'); }
 });
 
