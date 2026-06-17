@@ -600,7 +600,6 @@ function viewTraining(){
     ['trebles','&#9650;','Trebles Practice','Tr&auml;na p&aring; treble-f&auml;lten','%'],
     ['bulls','&#9678;','Bulls Practice','Tr&auml;na p&aring; bullseye','%'],
     ['bob27','&#127919;',"Bob's 27",'Dubbel-utmaning D1 till Bull','p'],
-    ['c121','&#11014;','121','Kl&auml;ttra fr&aring;n 121 — checka & h&ouml;j','p'],
     ['halveit','&#9889;','Halve-it','Missar du halveras po&auml;ngen','p'],
   ];
   return topbar('Tr&auml;ning')+`<div class="view">
@@ -636,6 +635,16 @@ function viewTraining(){
       <div class="chips">
         <div class="chip" onclick="startShanghai(7)">1&ndash;7</div>
         <div class="chip" onclick="startShanghai(20)">1&ndash;20</div>
+      </div>
+    </div>
+    <div class="card">
+      <div style="display:flex;align-items:center;gap:12px;margin-bottom:12px">
+        <span class="ico">&#11014;</span>
+        <div style="flex:1"><div style="font-size:16px;font-weight:500">121</div>
+        <div class="muted" style="text-transform:none;letter-spacing:0">Kl&auml;ttra fr&aring;n 121 &middot; v&auml;lj antal pilar${pbs.c121!=null?' &middot; PB '+pbs.c121:''}</div></div>
+      </div>
+      <div class="chips">
+        ${[3,6,9,12,15].map(n=>`<div class="chip" onclick="startC121(${n})">${n}</div>`).join('')}
       </div>
     </div>
     ${recordsCard(pbs)}
@@ -770,7 +779,7 @@ function ttC121(tr){
   if(tr.attempts>=tr.maxAttempts){ saveTrainingResult('c121',tr.title,tr.best); return ttResult(tr, tr.success+' av '+tr.attempts+' lyckade · h&ouml;gsta '+(tr.best||'–'), (tr.best||0)+' p'); }
   const route=checkout(tr.target,'double');
   return thead(tr,'F&ouml;rs&ouml;k '+(tr.attempts+1)+'/'+tr.maxAttempts+' &middot; h&ouml;gsta '+(tr.best||'–')) +
-    `<div class="scorehero"><div class="who">Checka ut (3 pilar)</div><div class="rem">${tr.target}</div>
+    `<div class="scorehero"><div class="who">Checka ut &middot; ${tr.darts} pilar</div><div class="rem">${tr.target}</div>
       <div class="co"><div class="coroute">${route.map(x=>`<span class="x">${x}</span>`).join('')}</div></div></div>
     <div style="padding:16px">
       <button class="btn" onclick="c121Mark(true)">&#10003; Lyckades</button>
@@ -1232,7 +1241,6 @@ function startTraining(id){
   else if(id==='trebles') tr={id,kind:'seq',title:'Trebles Practice',seq:[20,19,18,17,16,15,14,13,12,11].map(n=>'T'+n),index:0,hits:0,throws:0};
   else if(id==='halveit') tr={id,kind:'halveit',title:'Halve-it',targets:['15','16','Dubbel','17','18','Trippel','19','20','Bull'],index:0,total:40};
   else if(id==='bob27') tr={id,kind:'bob27',title:"Bob's 27",targets:[...Array.from({length:20},(_,i)=>'D'+(i+1)),'Bull'],index:0,score:27,out:false};
-  else if(id==='c121') tr={id,kind:'c121',title:'121',target:121,attempts:0,success:0,best:0,maxAttempts:9};
   else return;
   state.training=tr; state.buffer=''; go('trainingActive');
 }
@@ -1256,9 +1264,14 @@ function startShanghai(count){
     numbers:Array.from({length:count},(_,i)=>i+1),index:0,total:0,roundDarts:[],roundMults:{S:false,D:false,T:false},shanghai:false};
   state.buffer=''; go('trainingActive');
 }
+function startC121(darts){
+  state.training={id:'c121',kind:'c121',title:'121 · '+darts+' pilar',darts,target:121,attempts:0,success:0,best:0,maxAttempts:9};
+  state.buffer=''; go('trainingActive');
+}
 function repeatTraining(){ const tr=state.training;
   if(tr.kind==='checkout') startCheckout(tr.difficulty);
   else if(tr.kind==='shanghai') startShanghai(tr.count);
+  else if(tr.kind==='c121') startC121(tr.darts);
   else startTraining(tr.id); }
 function trainHit(hit){ const tr=state.training; tr.throws++; if(hit)tr.hits++; tr.index++; render(); }
 function cricketMark(n){ const tr=state.training; tr.marks+=n; tr.index++; render(); }
