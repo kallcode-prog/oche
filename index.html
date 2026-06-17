@@ -816,11 +816,11 @@ function grabFrame(){
   return p.getImageData(0,0,proc.width,proc.height);
 }
 function diffFrame(ref,cur){
-  const a=ref.data,b=cur.data,w=cur.width,h=cur.height; let c=0,sx=0,sy=0;
+  const a=ref.data,b=cur.data,w=cur.width,h=cur.height; let c=0,sx=0,sy=0,minx=w,miny=h,maxx=0,maxy=0;
   for(let y=0;y<h;y++) for(let x=0;x<w;x++){ const i=(y*w+x)*4;
     const la=a[i]*.299+a[i+1]*.587+a[i+2]*.114, lb=b[i]*.299+b[i+1]*.587+b[i+2]*.114;
-    if(Math.abs(la-lb)>34){ c++; sx+=x; sy+=y; } }
-  return c? {count:c,cx:sx/c,cy:sy/c} : {count:0,cx:0,cy:0};
+    if(Math.abs(la-lb)>30){ c++; sx+=x; sy+=y; if(x<minx)minx=x; if(x>maxx)maxx=x; if(y<miny)miny=y; if(y>maxy)maxy=y; } }
+  return c? {count:c,cx:sx/c,cy:sy/c,bw:maxx-minx,bh:maxy-miny} : {count:0,cx:0,cy:0,bw:0,bh:0};
 }
 function rearmRef(){ camState.refData=grabFrame(); if(camState.det) camState.det.stableCount=0; }
 function startDetect(){
@@ -828,7 +828,7 @@ function startDetect(){
   const proc=document.createElement('canvas');
   proc.width=200; proc.height=Math.max(120,Math.round(200*(canvas.height||1)/(canvas.width||1)));
   camState.proc=proc; camState.refData=null; camState.suggestion=null;
-  camState.det={stableCount:0,lastCx:0,lastCy:0,lastCount:0};
+  camState.det={stableCount:0,last:null,globalCount:0};
   setTimeout(()=>{ camState.refData=grabFrame(); },500);
   camState.detTimer=setInterval(detectTick,130);
 }
@@ -837,12 +837,19 @@ function detectTick(){
   if(!camState.auto || camState.suggestion) return;
   const cur=grabFrame(); if(!cur) return;
   if(!camState.refData){ camState.refData=cur; return; }
-  const d=diffFrame(camState.refData,cur), A=cur.width*cur.height, ratio=d.count/A, det=camState.det;
-  if(ratio>0.10 || ratio<0.0035){ det.stableCount=0; det.lastCount=d.count; det.lastCx=d.cx; det.lastCy=d.cy; return; }
-  const moved=Math.hypot(d.cx-det.lastCx,d.cy-det.lastCy);
-  if(moved<3 && Math.abs(d.count-det.lastCount)<A*0.002) det.stableCount++; else det.stableCount=1;
-  det.lastCx=d.cx; det.lastCy=d.cy; det.lastCount=d.count;
-  if(det.stableCount>=3){ det.stableCount=0; emitSuggestion(d.cx,d.cy); }
+  const d=diffFrame(camState.refData,cur), w=cur.width, h=cur.height, A=w*h, det=camState.det;
+  const compact = d.count>0 && d.bw < w*0.4 && d.bh < h*0.45;   // liten, lokal fläck = pil
+  const sized = d.count>=12 && d.count <= A*0.05;               // pil-stor (ej hela bilden)
+  if(!(compact && sized)){
+    det.stableCount=0; det.last=null;
+    if(d.count > A*0.05){ det.globalCount=(det.globalCount||0)+1; if(det.globalCount>10){ camState.refData=cur; det.globalCount=0; } }
+    else det.globalCount=0;
+    return;
+  }
+  det.globalCount=0;
+  if(det.last && Math.hypot(d.cx-det.last.cx,d.cy-det.last.cy)<4) det.stableCount++; else det.stableCount=1;
+  det.last={cx:d.cx,cy:d.cy};
+  if(det.stableCount>=2){ det.stableCount=0; emitSuggestion(d.cx,d.cy); }
 }
 function emitSuggestion(cx,cy){
   const canvas=camState.canvas, proc=camState.proc; if(!canvas||!proc) return;
