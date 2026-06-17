@@ -379,7 +379,7 @@ function viewHome(){
       <div class="menuitem" onclick="go('stats')"><span class="ico">&#128202;</span>Statistik</div>
     </div>
     <div class="label" style="margin-top:8px">Senaste matcher</div>
-    ${recent.length? recent.map(histRow).join('') :
+    ${recent.length? recent.map(m=>histRow(m,false)).join('') :
       '<div class="muted" style="padding:8px 2px">Inga matcher &auml;n &mdash; spela din f&ouml;rsta!</div>'}
   </div>`;
 }
@@ -569,18 +569,25 @@ function viewStats(){
       <button class="btn secondary" style="margin-top:12px" onclick="openPlayerStats('${jsq(name)}')">Mer statistik &#8594;</button>
     </div>`).join('')}
     <div class="label" style="margin-top:8px">Historik</div>
-    ${hist.slice().reverse().map(histRow).join('')}
+    ${hist.slice().reverse().map(m=>histRow(m,true)).join('')}
     <button class="btn danger" style="margin-top:8px" onclick="clearHistory()">Rensa all historik</button>
   </div>`;
 }
 
-function histRow(m){
+function histRow(m, deletable){
   const sim=simulate(m); const w=sim.winner!=null?m.config.players[sim.winner]:'avbruten';
   const d=new Date(m.date); const ds=d.toLocaleDateString('sv-SE')+' '+d.toLocaleTimeString('sv-SE',{hour:'2-digit',minute:'2-digit'});
   return `<div class="histitem">
-    <div><div style="font-weight:600">${esc(m.config.players.join(', '))}</div>
+    <div style="min-width:0"><div style="font-weight:600">${esc(m.config.players.join(', '))}</div>
     <div class="meta">${m.config.startScore} &middot; ${ruleName(m.config.outRule)} out &middot; ${ds}</div></div>
-    <div class="badge">&#127942; ${esc(w)}</div></div>`;
+    <div class="row" style="gap:8px;flex:0 0 auto"><div class="badge">&#127942; ${esc(w)}</div>
+    ${deletable?`<button class="recreset" title="Radera match" onclick="deleteMatch('${m.id}',${m.date})">&times;</button>`:''}</div>
+  </div>`;
+}
+function deleteMatch(id,date){
+  if(!confirm('Radera den här matchen?')) return;
+  const hist=DB.load('matches',[]).filter(m=>!(m.id===id && m.date===date));
+  DB.save('matches',hist); toast('Match raderad',true); render();
 }
 
 function viewTraining(){
