@@ -777,13 +777,22 @@ function ttBob27(tr){
 }
 function ttC121(tr){
   if(tr.over){ if(tr.best>0) saveTrainingResult('c121',tr.title,tr.best); return ttResult(tr, tr.checkouts+' utg&aring;ngar &middot; h&ouml;gsta '+(tr.best||'–'), (tr.best||0)+' p'); }
-  const buf=state.buffer;
-  const route=checkout(tr.rem,'double',3);
+  const route=checkout(tr.rem,'double',Math.min(3-tr.visitDarts.length, tr.dartsLeft));
+  const slots=[0,1,2].map(i=>{ const d=tr.visitDarts[i]; return `<span class="dchip ${d?'on':''}">${d?d.label:'&middot;'}</span>`; }).join('');
+  const mult=state.mult;
   return thead(tr,'M&aring;l '+tr.target+' &middot; '+tr.dartsLeft+' pilar kvar') +
-    `<div class="scorehero"><div class="who">Checka ut &middot; h&ouml;gsta ${tr.best||'–'}</div>
-      <div class="rem ${buf!==''?'buffer':''}">${buf!==''?buf:tr.rem}</div>
-      <div class="co">${route.length?`<div class="coroute">${route.map(x=>`<span class="x">${x}</span>`).join('')}</div>`:''}</div></div>` +
-    numpadHTML('c121Submit');
+    `<div class="scorehero" style="padding-bottom:2px"><div class="who">Checka ut &middot; h&ouml;gsta ${tr.best||'–'}</div>
+      <div class="rem">${tr.rem}</div>
+      <div class="co">${route.length?`<div class="coroute">${route.map(x=>`<span class="x">${x}</span>`).join('')}</div>`:''}</div></div>
+    <div class="dartslots">${slots}</div>
+    <div class="multrow">${[['S','Singel'],['D','Dubbel'],['T','Tripple']].map(([k,l])=>`<button class="multbtn ${mult===k?'on':''}" onclick="setMult('${k}')">${l}</button>`).join('')}</div>
+    <div class="dartgrid">${Array.from({length:20},(_,i)=>i+1).map(n=>`<button onclick="c121Num(${n})">${n}</button>`).join('')}</div>
+    <div class="dartspecial">
+      <button onclick="c121Val(50,'Bull',true)">Bull</button>
+      <button onclick="c121Val(25,'Outer',false)">Outer</button>
+      <button onclick="c121Val(0,'Miss',false)">Miss</button>
+      <button class="back" onclick="c121Back()">&#9003; Tillbaka</button>
+    </div>`;
 }
 
 /* ============================== kamera (beta) ============================== */
@@ -1037,8 +1046,9 @@ function render(){
     case 'camera': html=viewCamera(); break;
     default: html=viewHome();
   }
-  app.className = state.view==='game' ? 'game' : state.view==='camera' ? 'cam' : ((state.view==='trainingActive'||state.view==='summary') ? 'nonav' : '');
-  document.body.classList.toggle('playing', state.view==='game');
+  const c121Pad = state.view==='trainingActive' && state.training && state.training.kind==='c121' && !state.training.over;
+  app.className = (state.view==='game'||c121Pad) ? 'game' : state.view==='camera' ? 'cam' : ((state.view==='trainingActive'||state.view==='summary') ? 'nonav' : '');
+  document.body.classList.toggle('playing', state.view==='game'||c121Pad);
   app.innerHTML=html+navbar();
   if(state.view==='camera') requestAnimationFrame(initCamera);
   if(state.view==='game' && state.match) DB.save('current',{match:state.match,darts:state.darts,mult:state.mult});
@@ -1126,13 +1136,12 @@ function undo(){
   m.turns.pop(); state.mult='S'; render();
 }
 function setMult(k){ state.mult = state.mult===k? 'S' : k; render(); }
-function tapNumber(n){
-  const m=state.mult;
-  let val=n, label='S'+n, isDouble=false, isTreble=false;
-  if(m==='D'){ val=n*2; label='D'+n; isDouble=true; }
-  else if(m==='T'){ val=n*3; label='T'+n; isTreble=true; }
-  state.mult='S'; addDart({val,label,isDouble,isTreble});
+function dartFromNum(n){ const m=state.mult; state.mult='S';
+  if(m==='D') return {val:n*2,label:'D'+n,isDouble:true,isTreble:false};
+  if(m==='T') return {val:n*3,label:'T'+n,isDouble:false,isTreble:true};
+  return {val:n,label:'S'+n,isDouble:false,isTreble:false};
 }
+function tapNumber(n){ addDart(dartFromNum(n)); }
 function tapVal(val,label,isDouble){ state.mult='S'; addDart({val,label,isDouble,isTreble:false}); }
 function applyThrow(d){
   const m=state.match, sim=simulate(m), cur=sim.cur;
@@ -1264,8 +1273,8 @@ function startShanghai(count){
   state.buffer=''; go('trainingActive');
 }
 function startC121(darts){
-  state.training={id:'c121',kind:'c121',title:'121 · '+darts+' pilar',darts,target:121,rem:121,dartsLeft:darts,best:0,checkouts:0,over:false};
-  state.buffer=''; go('trainingActive');
+  state.training={id:'c121',kind:'c121',title:'121 · '+darts+' pilar',darts,target:121,rem:121,dartsLeft:darts,visitStartRem:121,visitDarts:[],best:0,checkouts:0,over:false};
+  state.mult='S'; state.buffer=''; go('trainingActive');
 }
 function repeatTraining(){ const tr=state.training;
   if(tr.kind==='checkout') startCheckout(tr.difficulty);
@@ -1287,20 +1296,24 @@ function nextCheckout(start, up){
   }
   return 40;
 }
-function c121Submit(){ const tr=state.training; if(state.buffer==='')return; let s=parseInt(state.buffer);
-  if(isNaN(s))s=0; if(s>180){toast('Max 180');state.buffer='';render();return;}
-  const newRem=tr.rem-s;
-  if(newRem===0){ // utgång!
+function c121Dart(d){
+  const tr=state.training; if(!tr||tr.over) return; state.mult='S';
+  const newRem=tr.rem-d.val;
+  if(newRem===0 && d.isDouble){ // utgång på dubbel!
     tr.checkouts++; tr.best=Math.max(tr.best,tr.target);
     haptic([120]); caller('Game shot'); if(tr.target>=100) celebrateScore(tr.target);
-    tr.target=nextCheckout(tr.target+1,true); tr.rem=tr.target; tr.dartsLeft=tr.darts;
-    toast('Utgång! Nästa: '+tr.target,true); state.buffer=''; render(); return;
+    tr.target=nextCheckout(tr.target+1,true); tr.rem=tr.target; tr.dartsLeft=tr.darts; tr.visitStartRem=tr.target; tr.visitDarts=[];
+    toast('Utgång! Nästa: '+tr.target,true); render(); return;
   }
-  if(newRem<0 || newRem===1){ toast('Bust!'); haptic([200]); }  // rem oförändrad
-  else tr.rem=newRem;
-  tr.dartsLeft-=3;
+  tr.dartsLeft--;
+  if(newRem<0 || newRem===1 || newRem===0){ toast('Bust!'); haptic([200]); tr.rem=tr.visitStartRem; tr.visitDarts=[]; }
+  else { tr.rem=newRem; tr.visitDarts.push(d); if(tr.visitDarts.length>=3){ tr.visitStartRem=tr.rem; tr.visitDarts=[]; } }
   if(tr.dartsLeft<=0) tr.over=true;
-  state.buffer=''; render(); }
+  render();
+}
+function c121Num(n){ c121Dart(dartFromNum(n)); }
+function c121Val(val,label,isDouble){ state.mult='S'; c121Dart({val,label,isDouble,isTreble:false}); }
+function c121Back(){ const tr=state.training; if(tr.visitDarts.length>0){ const d=tr.visitDarts.pop(); tr.rem+=d.val; tr.dartsLeft++; } render(); }
 function scoringSubmit(){ const tr=state.training; if(state.buffer==='')return; let s=parseInt(state.buffer);
   if(isNaN(s))s=0; if(s>180){toast('Max 180');state.buffer='';render();return;}
   tr.scores.push(s); tr.index++; state.buffer=''; render(); }
@@ -1512,10 +1525,10 @@ function exportPDF(){
 /* ============================== keyboard ============================== */
 document.addEventListener('keydown',e=>{
   const k = (state.view==='trainingActive' && state.training) ? state.training.kind : null;
-  const numEntry = (k==='scoring' || k==='halveit' || k==='c121');
+  const numEntry = (k==='scoring' || k==='halveit');
   if(!numEntry || state.pendingCheckout) return;
   if(e.key>='0'&&e.key<='9') press(e.key);
-  else if(e.key==='Enter'){ k==='halveit'? halveitSubmit() : k==='c121'? c121Submit() : scoringSubmit(); }
+  else if(e.key==='Enter'){ k==='halveit'? halveitSubmit() : scoringSubmit(); }
   else if(e.key==='Backspace'){ e.preventDefault(); press('back'); }
 });
 
