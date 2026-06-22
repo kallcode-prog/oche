@@ -777,13 +777,13 @@ function ttBob27(tr){
 }
 function ttC121(tr){
   if(tr.over){ if(tr.best>0) saveTrainingResult('c121',tr.title,tr.best); return ttResult(tr, tr.checkouts+' utg&aring;ngar &middot; h&ouml;gsta '+(tr.best||'–'), (tr.best||0)+' p'); }
-  const route=checkout(tr.rem,'double',Math.min(3-tr.visitDarts.length, tr.dartsLeft));
+  const coOpts=checkoutOptions(tr.rem,'double',Math.min(3-tr.visitDarts.length, tr.dartsLeft),3);
   const slots=[0,1,2].map(i=>{ const d=tr.visitDarts[i]; return `<span class="dchip ${d?'on':''}">${d?d.label:'&middot;'}</span>`; }).join('');
   const mult=state.mult;
   return thead(tr,'M&aring;l '+tr.target+' &middot; '+tr.dartsLeft+' pilar kvar') +
     `<div class="scorehero" style="padding-bottom:2px"><div class="who">Checka ut &middot; h&ouml;gsta ${tr.best||'–'}</div>
       <div class="rem">${tr.rem}</div>
-      <div class="co">${route.length?`<div class="coroute">${route.map(x=>`<span class="x">${x}</span>`).join('')}</div>`:''}</div></div>
+      <div class="co">${coOpts.map((r,i)=>`<div class="coroute${i?' alt':''}">${r.map(x=>`<span class="x">${x}</span>`).join('')}</div>`).join('')}</div></div>
     <div class="dartslots">${slots}</div>
     <div class="multrow">${[['S','Singel'],['D','Dubbel'],['T','Tripple']].map(([k,l])=>`<button class="multbtn ${mult===k?'on':''}" onclick="setMult('${k}')">${l}</button>`).join('')}</div>
     <div class="dartgrid">${Array.from({length:20},(_,i)=>i+1).map(n=>`<button onclick="c121Num(${n})">${n}</button>`).join('')}</div>
